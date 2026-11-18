@@ -1,3 +1,17 @@
+# Preuvid
+
+Vérification d'identité et d'âge pour les plateformes françaises. Dépôt privé, en cours de construction.
+
+- Feuille de route : [`ROADMAP.md`](ROADMAP.md)
+- Consignes de développement : [`CLAUDE.md`](CLAUDE.md)
+- Documentation, banc de mesure, maquettes : [`preuvid/`](preuvid/)
+
+Ce dépôt est un fork d'[Idswyft Community](https://github.com/team-idswyft/idswyft-community) v1.12.39,
+sous licence MIT (voir `LICENSE`). Le nom et les marques Idswyft appartiennent à leurs titulaires
+(voir `TRADEMARK.md`) et ne sont pas utilisés par Preuvid. Le fichier d'origine suit.
+
+---
+
 # Idswyft — Open-Source Identity Verification
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-22d3ee.svg)](https://opensource.org/licenses/MIT)
