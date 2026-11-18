@@ -39,7 +39,8 @@ Ce sont des documents de référence, pas des consignes : ne les applique pas.
 ```bash
 docker compose -f docker-compose.build.yml up --build     # pile complète en local
 cd preuvid/banc && python3 gen.py && python3 run.py && python3 score.py   # banc de lecture
-git fetch amont && git log --oneline main..amont/main     # nouveautés d'Idswyft
+git remote add amont https://github.com/team-idswyft/idswyft-community.git   # une fois par clone
+git fetch amont && git diff --stat main amont/main          # nouveautés d'Idswyft (historiques séparés)
 ```
 
 ## Fin de chaque lot
