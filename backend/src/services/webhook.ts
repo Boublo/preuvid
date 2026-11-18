@@ -1,0 +1,640 @@
+import axios from 'axios';
+import crypto from 'crypto';
+import { supabase } from '@/config/database.js';
+import config from '@/config/index.js';
+import { logger, logWebhookDelivery } from '@/utils/logger.js';
+import { Webhook, WebhookDelivery, WebhookPayload } from '@/types/index.js';
+import { encryptSecret, decryptSecret } from '@idswyft/shared';
+import { validateWebhookUrl, getSafeHttpAgent, getSafeHttpsAgent, SsrfError } from '@/utils/validateUrl.js';
+
+/**
+ * Build the headers attached to every webhook delivery. Pure function —
+ * exported so unit tests can assert header construction without spinning
+ * up axios / supabase mocks.
+ *
+ * Includes X-Idswyft-Sandbox (boolean string) and X-Idswyft-Verification-Mode
+ * ("sandbox" | "production") — receivers can route or alert based on these
+ * without parsing the JSON payload.
+ */
+export function buildWebhookHeaders(
+  webhook: Pick<Webhook, 'is_sandbox'>,
+  deliveryId: string,
+  attempt: number,
+  payload?: Pick<WebhookPayload, 'is_service' | 'service_product' | 'service_environment'>,
+): Record<string, string> {
+  const isSandbox = Boolean(webhook.is_sandbox);
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'User-Agent': 'Idswyft-Webhooks/1.0',
+    'X-Idswyft-Webhook-Id': deliveryId,
+    'X-Idswyft-Delivery-Attempt': attempt.toString(),
+    'X-Idswyft-Sandbox': String(isSandbox),
+    'X-Idswyft-Verification-Mode': isSandbox ? 'sandbox' : 'production',
+  };
+
+  // Service-key context headers (Phase 2). Emitted only for service-key-driven
+  // webhooks so receivers like GatePass can route per-product without parsing
+  // JSON. Backwards-compatible — absent for ordinary developer webhooks.
+  if (payload?.is_service) {
+    headers['X-Idswyft-Is-Service'] = 'true';
+    if (payload.service_product) {
+      headers['X-Idswyft-Service-Product'] = payload.service_product;
+    }
+    if (payload.service_environment) {
+      headers['X-Idswyft-Service-Environment'] = payload.service_environment;
+    }
+  }
+
+  return headers;
+}
+
+/** Encrypt a webhook secret_token before writing to the DB. */
+function encryptWebhookSecret(plaintext: string): string {
+  return encryptSecret(plaintext, config.encryptionKey);
+}
+
+/** Decrypt a webhook secret_token read from the DB. Returns null on failure. */
+function decryptWebhookSecret(ciphertext: string): string | null {
+  try {
+    return decryptSecret(ciphertext, config.encryptionKey);
+  } catch {
+    // Backwards-compat: if decryption fails, assume it's a legacy plaintext value
+    return ciphertext;
+  }
+}
+
+export class WebhookService {
+  async createWebhook(data: {
+    developer_id: string;
+    url: string;
+    is_sandbox: boolean;
+    secret_token?: string;
+    events?: string[];
+    api_key_id?: string | null;
+  }): Promise<Webhook> {
+    // The webhooks table column is `secret_key` (migration 01); the service/API
+    // layer uses `secret_token`. Map it onto the real column on write, encrypted.
+    // Writing `secret_token` directly threw `column "secret_token" does not exist`
+    // on any fresh database (community #58). The read path already tolerates both.
+    const insertData: Record<string, any> = { ...data };
+    // Map secret_token onto secret_key only when a value is present, then ALWAYS
+    // strip secret_token. Leaving the key with an `undefined` value still lists
+    // the nonexistent `secret_token` column on the community PgClient adapter,
+    // whose column list comes from Object.keys — that is the #58 no-secret repro.
+    if (insertData.secret_token) {
+      insertData.secret_key = encryptWebhookSecret(insertData.secret_token);
+    }
+    delete insertData.secret_token;
+
+    const { data: webhook, error } = await supabase
+      .from('webhooks')
+      .insert(insertData)
+      .select('*')
+      .single();
+    
+    if (error) {
+      logger.error('Failed to create webhook:', error);
+      throw new Error('Failed to create webhook');
+    }
+    
+    return webhook as Webhook;
+  }
+  
+  async getWebhookById(id: string): Promise<Webhook | null> {
+    const { data: webhook, error } = await supabase
+      .from('webhooks')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      logger.error('Failed to get webhook:', error);
+      throw new Error('Failed to get webhook');
+    }
+    
+    return webhook as Webhook;
+  }
+  
+  async getWebhookByUrl(
+    developerId: string, 
+    url: string, 
+    isSandbox: boolean
+  ): Promise<Webhook | null> {
+    const { data: webhook, error } = await supabase
+      .from('webhooks')
+      .select('*')
+      .eq('developer_id', developerId)
+      .eq('url', url)
+      .eq('is_sandbox', isSandbox)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null;
+      }
+      logger.error('Failed to get webhook by URL:', error);
+      throw new Error('Failed to get webhook');
+    }
+    
+    return webhook as Webhook;
+  }
+  
+  async getWebhooksByDeveloper(developerId: string): Promise<Webhook[]> {
+    const { data: webhooks, error } = await supabase
+      .from('webhooks')
+      .select('*')
+      .eq('developer_id', developerId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      logger.error('Failed to get webhooks by developer:', error);
+      throw new Error('Failed to get webhooks');
+    }
+    
+    return webhooks as Webhook[];
+  }
+  
+  async updateWebhook(id: string, updates: Partial<Webhook>): Promise<Webhook> {
+    // Map secret_token → the actual secret_key column on write (see createWebhook).
+    const safeUpdates: Record<string, any> = { ...updates };
+    // Same rule as createWebhook: map only when present, but always strip
+    // secret_token so an undefined key can't list the nonexistent column.
+    if (safeUpdates.secret_token) {
+      safeUpdates.secret_key = encryptWebhookSecret(safeUpdates.secret_token);
+    }
+    delete safeUpdates.secret_token;
+
+    const { data: webhook, error } = await supabase
+      .from('webhooks')
+      .update(safeUpdates)
+      .eq('id', id)
+      .select('*')
+      .single();
+    
+    if (error) {
+      logger.error('Failed to update webhook:', error);
+      throw new Error('Failed to update webhook');
+    }
+    
+    return webhook as Webhook;
+  }
+  
+  async deleteWebhook(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('webhooks')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      logger.error('Failed to delete webhook:', error);
+      throw new Error('Failed to delete webhook');
+    }
+  }
+  
+  async sendWebhook(
+    webhook: Webhook,
+    verificationRequestId: string,
+    payload: WebhookPayload
+  ): Promise<WebhookDelivery> {
+    // Create webhook delivery record
+    const { data: delivery, error } = await supabase
+      .from('webhook_deliveries')
+      .insert({
+        webhook_id: webhook.id,
+        verification_request_id: verificationRequestId,
+        payload,
+        status: 'pending',
+        attempts: 0
+      })
+      .select('*')
+      .single();
+    
+    if (error) {
+      logger.error('Failed to create webhook delivery:', error);
+      throw new Error('Failed to create webhook delivery');
+    }
+    
+    // Send webhook asynchronously
+    this.deliverWebhook(delivery as WebhookDelivery, webhook).catch(error => {
+      logger.error('Webhook delivery failed:', error);
+    });
+
+    return delivery as WebhookDelivery;
+  }
+
+  /**
+   * Send a one-off *test* delivery without persisting a webhook_deliveries row.
+   *
+   * `webhook_deliveries.verification_request_id` is NOT NULL with a foreign key
+   * to `verification_requests(id)`. A test has no real verification to point at,
+   * so persisting a synthetic delivery always failed the FK — the test endpoint
+   * could never work (community #58, part 2). Fire the HTTP POST directly using
+   * the same headers, signature, and SSRF guard a real delivery uses, and report
+   * the result without touching the database.
+   */
+  async sendTestWebhook(
+    webhook: Webhook,
+    payload: WebhookPayload,
+  ): Promise<{ delivered: boolean; response_status: number; error?: string }> {
+    const deliveryId = `test-${crypto.randomUUID()}`;
+    const headers = buildWebhookHeaders(webhook, deliveryId, 1, payload);
+    headers['X-Idswyft-Test'] = 'true';
+
+    // Sign with the decrypted secret so receivers can verify the test the same
+    // way they verify real deliveries. decryptWebhookSecret tolerates both the
+    // encrypted (service-layer) and legacy-plaintext storage conventions.
+    const rawSecret = webhook.secret_key || webhook.secret_token;
+    if (rawSecret) {
+      const signingSecret = decryptWebhookSecret(rawSecret);
+      if (signingSecret) {
+        headers['X-Idswyft-Signature'] = this.generateSignature(
+          JSON.stringify(payload),
+          signingSecret,
+        );
+      }
+    }
+
+    // Re-validate the URL at send time (same SSRF guard as real deliveries).
+    // An SsrfError is a developer-visible reason; anything else is rethrown.
+    try {
+      await validateWebhookUrl(webhook.url);
+    } catch (err: any) {
+      if (err instanceof SsrfError) {
+        return { delivered: false, response_status: 0, error: `URL rejected by SSRF guard: ${err.message}` };
+      }
+      throw err;
+    }
+
+    try {
+      const response = await axios.post(webhook.url, payload, {
+        headers,
+        timeout: config.webhooks.timeoutMs,
+        maxRedirects: 0,
+        httpAgent: getSafeHttpAgent(),
+        httpsAgent: getSafeHttpsAgent(),
+        validateStatus: () => true, // report any status; never throw on HTTP status
+      });
+      return { delivered: response.status < 400, response_status: response.status };
+    } catch (error: any) {
+      return {
+        delivered: false,
+        response_status: error.response?.status ?? 0,
+        error: error.message,
+      };
+    }
+  }
+
+  private async deliverWebhook(delivery: WebhookDelivery, webhook: Webhook): Promise<void> {
+    const maxAttempts = config.webhooks.retryAttempts;
+    let attempt = delivery.attempts + 1;
+    
+    while (attempt <= maxAttempts) {
+      try {
+        logWebhookDelivery(webhook.id, 'attempting', {
+          deliveryId: delivery.id,
+          attempt,
+          maxAttempts,
+          url: webhook.url
+        });
+        
+        // Prepare headers (pure construction, exported for testability).
+        // Pass the payload so service-key context headers can be emitted
+        // when the verification was driven by an isk_* key.
+        const headers = buildWebhookHeaders(
+          webhook,
+          delivery.id,
+          attempt,
+          delivery.payload as WebhookPayload,
+        );
+
+        // Add signature if signing secret is provided (decrypt from DB storage)
+        const rawSecret = webhook.secret_key || webhook.secret_token;
+        if (rawSecret) {
+          const signingSecret = decryptWebhookSecret(rawSecret);
+          if (signingSecret) {
+            const signature = this.generateSignature(
+              JSON.stringify(delivery.payload),
+              signingSecret
+            );
+            headers['X-Idswyft-Signature'] = signature;
+          }
+        }
+        
+        // Re-validate at delivery time (closes the DNS-rebinding window
+        // between webhook creation and now). Safe Agents pin the lookup at
+        // connect time as a second layer in case the resolved IP flips
+        // between this check and the socket open. maxRedirects: 0 because
+        // webhooks should target a fixed endpoint — a 3xx response means
+        // the operator's webhook config is broken, not that we should
+        // chase the redirect.
+        try {
+          await validateWebhookUrl(webhook.url);
+        } catch (validateErr) {
+          if (validateErr instanceof SsrfError) {
+            throw new Error(`Webhook URL rejected by SSRF guard: ${validateErr.message}`);
+          }
+          throw validateErr;
+        }
+
+        // Send webhook
+        const response = await axios.post(webhook.url, delivery.payload, {
+          headers,
+          timeout: config.webhooks.timeoutMs,
+          maxRedirects: 0,
+          httpAgent: getSafeHttpAgent(),
+          httpsAgent: getSafeHttpsAgent(),
+          validateStatus: (status) => status < 500 // Only retry on 5xx errors
+        });
+        
+        // Update delivery as successful
+        await supabase
+          .from('webhook_deliveries')
+          .update({
+            status: 'delivered',
+            response_status: response.status,
+            response_body: this.truncateResponse(JSON.stringify(response.data)),
+            attempts: attempt,
+            delivered_at: new Date().toISOString()
+          })
+          .eq('id', delivery.id);
+        
+        logWebhookDelivery(webhook.id, 'delivered', {
+          deliveryId: delivery.id,
+          attempt,
+          responseStatus: response.status,
+          url: webhook.url
+        });
+        
+        return; // Success, exit retry loop
+        
+      } catch (error: any) {
+        const isLastAttempt = attempt === maxAttempts;
+        const responseStatus = error.response?.status || 0;
+        const responseBody = error.response ? 
+          this.truncateResponse(JSON.stringify(error.response.data)) : 
+          error.message;
+        
+        // Update delivery attempt
+        await supabase
+          .from('webhook_deliveries')
+          .update({
+            status: isLastAttempt ? 'failed' : 'pending',
+            response_status: responseStatus,
+            response_body: responseBody,
+            attempts: attempt,
+            next_retry_at: isLastAttempt ? null : this.calculateNextRetry(attempt)
+          })
+          .eq('id', delivery.id);
+        
+        logWebhookDelivery(webhook.id, isLastAttempt ? 'failed' : 'retry_scheduled', {
+          deliveryId: delivery.id,
+          attempt,
+          maxAttempts,
+          error: error.message,
+          responseStatus,
+          url: webhook.url
+        });
+        
+        if (isLastAttempt) {
+          logger.error('Webhook delivery failed after all retries', {
+            webhookId: webhook.id,
+            deliveryId: delivery.id,
+            attempts: attempt,
+            error: error.message
+          });
+          return;
+        }
+        
+        // Wait before retry (exponential backoff)
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30000); // Max 30 seconds
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        attempt++;
+      }
+    }
+  }
+  
+  private generateSignature(payload: string, secret: string): string {
+    return createWebhookSignature(payload, secret);
+  }
+  
+  private truncateResponse(response: string, maxLength: number = 1000): string {
+    if (response.length <= maxLength) {
+      return response;
+    }
+    return response.substring(0, maxLength) + '... (truncated)';
+  }
+  
+  private calculateNextRetry(attempt: number): string {
+    // Exponential backoff: 1min, 5min, 15min
+    const delays = [60000, 300000, 900000]; // in milliseconds
+    const delay = delays[Math.min(attempt - 1, delays.length - 1)];
+    const nextRetry = new Date(Date.now() + delay);
+    return nextRetry.toISOString();
+  }
+  
+  async getWebhookDeliveries(
+    webhookId: string,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ deliveries: WebhookDelivery[]; total: number }> {
+    const offset = (page - 1) * limit;
+    
+    const { data: deliveries, error } = await supabase
+      .from('webhook_deliveries')
+      .select('*')
+      .eq('webhook_id', webhookId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    
+    const { count, error: countError } = await supabase
+      .from('webhook_deliveries')
+      .select('*', { count: 'exact', head: true })
+      .eq('webhook_id', webhookId);
+    
+    if (error || countError) {
+      logger.error('Failed to get webhook deliveries:', error || countError);
+      throw new Error('Failed to get webhook deliveries');
+    }
+    
+    return {
+      deliveries: deliveries as WebhookDelivery[],
+      total: count || 0
+    };
+  }
+  
+  // Process pending webhook deliveries (to be called by a cron job)
+  async processPendingDeliveries(): Promise<void> {
+    const now = new Date().toISOString();
+    
+    // Get pending deliveries that are ready for retry
+    const { data: pendingDeliveries, error } = await supabase
+      .from('webhook_deliveries')
+      .select(`
+        *,
+        webhook:webhooks(*)
+      `)
+      .eq('status', 'pending')
+      .or(`next_retry_at.is.null,next_retry_at.lte.${now}`)
+      .limit(50); // Process in batches
+    
+    if (error) {
+      logger.error('Failed to get pending webhook deliveries:', error);
+      return;
+    }
+    
+    if (!pendingDeliveries || pendingDeliveries.length === 0) {
+      return;
+    }
+    
+    logger.info('Processing pending webhook deliveries', {
+      count: pendingDeliveries.length
+    });
+    
+    // Process each delivery
+    for (const delivery of pendingDeliveries) {
+      try {
+        await this.deliverWebhook(delivery as WebhookDelivery, delivery.webhook as Webhook);
+      } catch (error) {
+        logger.error('Error processing webhook delivery:', {
+          deliveryId: delivery.id,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+  }
+  
+  /**
+   * Fetch all active webhooks for a developer, filtered by sandbox mode
+   * and optionally by event type subscription.
+   * Returns [] on error — webhook failure must never block verification.
+   */
+  async getActiveWebhooksForDeveloper(
+    developerId: string,
+    isSandbox: boolean,
+    eventType?: string,
+    apiKeyId?: string
+  ): Promise<Webhook[]> {
+    try {
+      let query = supabase
+        .from('webhooks')
+        .select('*')
+        .eq('developer_id', developerId)
+        .eq('is_active', true)
+        .eq('is_sandbox', isSandbox);
+
+      // Each .or() produces an independent parenthesized group ANDed with the rest.
+      // When both are present: WHERE ... AND (events filter) AND (api_key filter)
+      if (eventType) {
+        query = query.or(`events.cs.{${eventType}},events.is.null`);
+      }
+
+      // Filter by API key scope: return webhooks that are either unscoped (NULL)
+      // or scoped to the specific API key that triggered the verification
+      if (apiKeyId) {
+        query = query.or(`api_key_id.is.null,api_key_id.eq.${apiKeyId}`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        logger.error('Failed to fetch active webhooks for developer:', error);
+        return [];
+      }
+
+      return (data ?? []) as Webhook[];
+    } catch (err) {
+      logger.error('Unexpected error fetching active webhooks:', err);
+      return [];
+    }
+  }
+
+  // Get webhook statistics for a developer
+  async getWebhookStats(developerId: string): Promise<{
+    total_webhooks: number;
+    active_webhooks: number;
+    total_deliveries: number;
+    successful_deliveries: number;
+    failed_deliveries: number;
+    pending_deliveries: number;
+  }> {
+    // Get webhook counts
+    const { count: totalWebhooks } = await supabase
+      .from('webhooks')
+      .select('*', { count: 'exact', head: true })
+      .eq('developer_id', developerId);
+    
+    const { count: activeWebhooks } = await supabase
+      .from('webhooks')
+      .select('*', { count: 'exact', head: true })
+      .eq('developer_id', developerId)
+      .eq('is_active', true);
+    
+    // Get delivery stats
+    const { data: deliveryStats } = await supabase
+      .from('webhook_deliveries')
+      .select(`
+        status,
+        webhook:webhooks!inner(developer_id)
+      `)
+      .eq('webhook.developer_id', developerId);
+    
+    const stats = {
+      total_webhooks: totalWebhooks || 0,
+      active_webhooks: activeWebhooks || 0,
+      total_deliveries: deliveryStats?.length || 0,
+      successful_deliveries: 0,
+      failed_deliveries: 0,
+      pending_deliveries: 0
+    };
+    
+    if (deliveryStats) {
+      deliveryStats.forEach((delivery: any) => {
+        switch (delivery.status) {
+          case 'delivered':
+            stats.successful_deliveries++;
+            break;
+          case 'failed':
+            stats.failed_deliveries++;
+            break;
+          case 'pending':
+            stats.pending_deliveries++;
+            break;
+        }
+      });
+    }
+    
+    return stats;
+  }
+}
+
+/**
+ * Creates an HMAC-SHA256 signature for a webhook payload.
+ * Format: "sha256=<64-char hex digest>"
+ */
+export function createWebhookSignature(payload: string, secret: string): string {
+  return `sha256=${crypto
+    .createHmac('sha256', secret)
+    .update(payload, 'utf8')
+    .digest('hex')}`;
+}
+
+/**
+ * Verifies an HMAC-SHA256 webhook signature using timing-safe comparison
+ * to prevent timing-based side-channel attacks.
+ */
+export function verifyWebhookSignature(
+  payload: string,
+  signature: string,
+  secret: string
+): boolean {
+  const expected = createWebhookSignature(payload, secret);
+  const expectedBuf = Buffer.from(expected);
+  const actualBuf = Buffer.from(signature);
+  // Length must match before timingSafeEqual (it requires equal-length buffers)
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, actualBuf);
+}
