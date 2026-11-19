@@ -81,6 +81,21 @@ const DocumentAuthenticitySchema = z.object({
   zoneScore: z.number().min(0).max(1).optional(),
 }).optional();
 
+// --- Champ issu de la MRZ, avec le statut de sa clé de contrôle (lot 1 Preuvid) ---
+const MergedFieldSchema = z.object({
+  value: z.string().nullable(),
+  check: z.enum(['juste', 'corrigee', 'fausse', 'sans_cle', 'absent']),
+  source: z.enum(['mrz', 'zone_imprimee', 'concordants']).nullable(),
+  confidence,
+});
+
+const MrzCorrectionSchema = z.object({
+  line: z.number().int(),
+  column: z.number().int(),
+  original: z.string(),
+  corrected: z.string(),
+});
+
 // --- Front Extraction Result ---
 export const FrontExtractionResultSchema = z.object({
   ocr: IDCardOCRSchema,
@@ -88,6 +103,10 @@ export const FrontExtractionResultSchema = z.object({
   face_confidence: confidence,
   ocr_confidence: confidence,
   mrz_from_front: z.array(z.string()).nullable(),
+  // Lot 1 Preuvid : statut des clés MRZ et détail champ par champ (ajouts, facultatifs).
+  mrz_valid: z.boolean().nullable().optional(),
+  mrz_fields: z.record(MergedFieldSchema).nullable().optional(),
+  mrz_corrections: z.array(MrzCorrectionSchema).nullable().optional(),
   authenticity: DocumentAuthenticitySchema,
   face_age: z.number().optional(),
   face_gender: z.string().optional(),

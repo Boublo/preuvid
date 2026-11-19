@@ -18,10 +18,16 @@ for r in truth:
         res=d.get('result') or {}
         if route=='front':
             o=res.get('ocr') or {}
-            rec=dict(lines=res.get('mrz_from_front'),name=o.get('full_name') or o.get('name'),dob=o.get('date_of_birth'),exp=o.get('expiry_date') or o.get('expiration_date'),num=o.get('id_number') or o.get('document_number'),conf=res.get('ocr_confidence'))
+            rec=dict(lines=res.get('mrz_from_front'),valid=res.get('mrz_valid'),name=o.get('full_name') or o.get('name'),dob=o.get('date_of_birth'),exp=o.get('expiry_date') or o.get('expiration_date'),num=o.get('id_number') or o.get('document_number'),conf=res.get('ocr_confidence'))
+            # Lot 1 : valeur et confiance champ par champ, pour compter les champs faux présentés comme sûrs.
+            rec['fields']={k:[v.get('value'),v.get('confidence')] for k,v in (res.get('mrz_fields') or {}).items()}
+            # Champs de premier niveau lus par l'API (ocr.*), avec leur confiance : comptés eux aussi.
+            cs=o.get('confidence_scores') or {}
+            rec['top']={k:[o.get(k),cs.get(k)] for k in ('document_number','date_of_birth','expiration_date','last_name','first_name')}
         else:
             m=res.get('mrz_result') or {}; q=res.get('qr_payload') or {}; f=m.get('fields') or {}
-            rec=dict(lines=m.get('raw_lines'),valid=m.get('check_digits_valid'),name=q.get('full_name') or f.get('full_name'),dob=q.get('date_of_birth'),exp=q.get('expiry_date'),num=q.get('id_number'))
+            rec=dict(lines=m.get('raw_lines'),valid=m.get('checksums_valid', m.get('check_digits_valid')),name=q.get('full_name') or f.get('full_name'),dob=q.get('date_of_birth'),exp=q.get('expiry_date'),num=q.get('id_number'))
+            rec['fields']={k:[v.get('value'),v.get('confidence')] for k,v in (m.get('field_checks') or {}).items()}
         rec.update(key=key,kind=r['kind'],cond=r['cond'],route=route,ok=bool(d.get('success')),err=d.get('error'),t=dt)
         out.write(json.dumps(rec,ensure_ascii=False)+'\n'); out.flush()
 print('DONE')

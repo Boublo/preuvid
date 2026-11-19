@@ -3,7 +3,7 @@
  *
  * Six endpoints that perform the heavy ML extraction work:
  *   POST /extract/front        — OCR + face detection + tamper analysis
- *   POST /extract/back         — Barcode/PDF417 + MRZ detection
+ *   POST /extract/back         — MRZ (PaddleOCR + clés de contrôle), PDF417 en secours
  *   POST /extract/live         — Face detection + liveness + deepfake analysis
  *   POST /extract/ocr          — OCR-only (address docs, utility bills)
  *   POST /extract/voice-enroll — Speaker embedding extraction (enrollment)
@@ -15,13 +15,16 @@
 
 import express, { Request, Response } from 'express';
 import multer from 'multer';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { logger } from '@/utils/logger.js';
 import { requireModels } from '@/models/registry.js';
 import { OCRService } from '@/services/ocr.js';
 import { BarcodeService } from '@/services/barcode.js';
 import { FaceRecognitionService } from '@/services/faceRecognition.js';
-import { extractMRZFromText, detectMRZInText, alpha3ToAlpha2 } from '@/services/mrz.js';
+import { detectMRZInText, alpha3ToAlpha2 } from '@/services/mrz.js';
+import { readMrzFromText, type MrzReading } from '@/services/mrzReader.js';
+import { mergeMrzIntoOcr, type MergedFields } from '@/services/mrzMerge.js';
+import { deskewDocument, type DeskewResult } from '@/services/deskew.js';
 import {
   createLivenessProvider, verifyHeadTurnLiveness,
   HeadTurnLivenessMetadataSchema,
@@ -104,6 +107,10 @@ interface OrientedExtraction {
   buffer: Buffer;
   angle: number;
   score: number;
+  /** Image avant redressement (EXIF appliqué) : l'analyse de falsification travaille dessus,
+   *  car le rééchantillonnage du redressement effacerait ou imiterait des traces de retouche. */
+  unwarped: Buffer;
+  deskew: DeskewResult | null;
 }
 
 /**
@@ -117,6 +124,9 @@ interface OrientedExtraction {
  * Cost: a single OCR pass in the common case thanks to the early exit; at most four
  * on the failure path, which is far cheaper than rejecting a valid document.
  */
+/** Encodage sans perte (PNG, compression rapide) : pas de dégradation avant l'OCR. */
+const lossless = (img: Sharp) => img.png({ compressionLevel: 1 }).toBuffer();
+
 async function extractWithOrientation(
   original: Buffer,
   documentType: string,
@@ -125,10 +135,22 @@ async function extractWithOrientation(
 ): Promise<OrientedExtraction> {
   let base = original;
   try {
-    // sharp().rotate() with no argument applies the EXIF orientation tag, if present
-    base = await sharp(original).rotate().toBuffer();
+    // Lot 1 : l'image n'est réencodée que si l'EXIF demande une rotation, et sans perte.
+    // Avant, chaque photo repassait en JPEG qualité 80, ce qui dégradait la lecture des
+    // images bruitées (et effaçait l'EXIF vu par l'analyse de falsification).
+    const { orientation } = await sharp(original).metadata();
+    if (orientation && orientation > 1) base = await lossless(sharp(original).rotate());
   } catch {
     base = original;
+  }
+  const unwarped = base;
+
+  // Redressement (lot 1) : inclinaison et perspective, avant les essais de rotation à 90°.
+  // Rend l'image telle quelle si la carte est déjà droite ou recadrée.
+  const deskew = await deskewDocument(base);
+  if (deskew.applied) {
+    base = deskew.buffer;
+    logger.info('Document redressé avant lecture', { angle: Number(deskew.angle.toFixed(1)) });
   }
 
   // 270° first among the rotations: portrait photos of landscape documents are the
@@ -140,7 +162,7 @@ async function extractWithOrientation(
     let candidate = base;
     if (angle !== 0) {
       try {
-        candidate = await sharp(base).rotate(angle).toBuffer();
+        candidate = await lossless(sharp(base).rotate(angle));
       } catch {
         continue;
       }
@@ -154,7 +176,7 @@ async function extractWithOrientation(
     }
 
     const score = scoreExtraction(ocr);
-    if (!best || score > best.score) best = { ocr, buffer: candidate, angle, score };
+    if (!best || score > best.score) best = { ocr, buffer: candidate, angle, score, unwarped, deskew };
     if (score >= ORIENTATION_GOOD_ENOUGH) break;
   }
 
@@ -164,7 +186,7 @@ async function extractWithOrientation(
     });
   }
 
-  return best ?? { ocr: null, buffer: base, angle: 0, score: 0 };
+  return best ?? { ocr: null, buffer: base, angle: 0, score: 0, unwarped, deskew };
 }
 
 // ─── POST /extract/front ─────────────────────────────────────────
@@ -221,48 +243,27 @@ router.post('/front', requireModels('ocr', 'visage'), upload.single('file'), asy
       faceConfidence = 0;
     }
 
-    // 3. MRZ detection on front document
+    // 3. MRZ du recto (passeport, CNI) : lecture tolérante, clés de contrôle, puis fusion
+    //    avec la zone imprimée. Un champ dont la clé est fausse n'est pas repris.
     let mrzFromFront: string[] | null = null;
+    let mrzFields: MergedFields | null = null;
+    let mrzReading: MrzReading | null = null;
     let detectedCountry = issuingCountry || null;
     if (ocrData?.raw_text) {
-      const mrzResult = extractMRZFromText(ocrData.raw_text);
-      if (mrzResult) {
-        mrzFromFront = mrzResult.raw_lines;
-
-        // A MRZ whose check digits validate is the most trustworthy source in the
-        // pipeline — it is checksum-protected, unlike free-text OCR. Fields taken from
-        // it must carry a matching confidence, otherwise they leave confidence_scores
-        // empty and the downstream average collapses to its 0.5 fallback, which sits
-        // below Gate 1's minimum and rejects an otherwise perfect read.
-        const mrzConfidence = mrzResult.check_digits_valid ? 0.99 : 0.75;
-        ocrData.confidence_scores = ocrData.confidence_scores || {};
-        const takeFromMRZ = (key: string, value: string | null | undefined): boolean => {
-          if (!value) return false;
-          ocrData.confidence_scores![key] = mrzConfidence;
-          return true;
-        };
-
-        if (!ocrData.name && takeFromMRZ('name', mrzResult.fields.full_name)) {
-          ocrData.name = mrzResult.fields.full_name!;
-        }
-        if (!ocrData.document_number && takeFromMRZ('document_number', mrzResult.fields.document_number)) {
-          ocrData.document_number = mrzResult.fields.document_number!;
-        }
-        if (!ocrData.date_of_birth && takeFromMRZ('date_of_birth', mrzResult.fields.date_of_birth)) {
-          ocrData.date_of_birth = mrzResult.fields.date_of_birth!;
-        }
-        if (!ocrData.expiration_date && takeFromMRZ('expiration_date', mrzResult.fields.expiry_date)) {
-          ocrData.expiration_date = mrzResult.fields.expiry_date!;
-        }
-        if (!detectedCountry && mrzResult.fields.issuing_country) {
-          detectedCountry = alpha3ToAlpha2(mrzResult.fields.issuing_country) || null;
+      mrzReading = readMrzFromText(ocrData.raw_text);
+      if (mrzReading) {
+        mrzFromFront = mrzReading.lines;
+        mrzFields = mergeMrzIntoOcr(ocrData, mrzReading);
+        const state = mrzReading.fields.issuing_country.value;
+        if (!detectedCountry && state && mrzReading.valid) {
+          detectedCountry = alpha3ToAlpha2(state) || null;
         }
         if (detectedCountry) ocrData.issuing_country = detectedCountry;
 
         logger.info('MRZ enrichment applied', {
-          checkDigitsValid: mrzResult.check_digits_valid,
-          format: mrzResult.format,
-          confidence: mrzConfidence,
+          checkDigitsValid: mrzReading.valid,
+          format: mrzReading.format,
+          corrections: mrzReading.corrections.length,
         });
       }
     }
@@ -278,7 +279,7 @@ router.post('/front', requireModels('ocr', 'visage'), upload.single('file'), asy
     // 4. Tamper detection + zone validation
     let authenticity: FrontExtractionResult['authenticity'] = undefined;
     try {
-      const tamperResult = await new SharpTamperDetector().analyze(imageBuffer);
+      const tamperResult = await new SharpTamperDetector().analyze(oriented.unwarped);
       authenticity = {
         score: tamperResult.score,
         flags: tamperResult.flags,
@@ -319,6 +320,9 @@ router.post('/front', requireModels('ocr', 'visage'), upload.single('file'), asy
       face_confidence: faceConfidence,
       ocr_confidence: avgConfidence,
       mrz_from_front: mrzFromFront,
+      mrz_valid: mrzReading ? mrzReading.valid : null,
+      mrz_fields: mrzFields,
+      mrz_corrections: mrzReading ? mrzReading.corrections : null,
       authenticity,
       face_age: faceAge,
       face_gender: faceGender,
@@ -353,88 +357,99 @@ router.post('/back', requireModels('ocr'), upload.single('file'), async (req: Re
       return res.status(400).json({ success: false, error: 'Image file is required (field: "file")' });
     }
 
-    const imageBuffer = req.file.buffer;
+    const issuingCountry = req.body.issuing_country || undefined;
 
-    // 1. Barcode/PDF417 scanning from buffer
-    let barcodeData;
-    try {
-      barcodeData = await barcodeService.scanBackOfIdFromBuffer(imageBuffer);
-    } catch {
-      barcodeData = null;
-    }
+    // 1. Texte du verso par PaddleOCR, avec correction des rotations de 90°. Le lot 0 passait
+    //    par Tesseract (barcodeService) et ne lisait aucune MRZ de CNI 2021 au banc.
+    const oriented = await extractWithOrientation(req.file.buffer, 'national_id', issuingCountry, undefined);
+    const rawText: string = oriented.ocr?.raw_text || '';
 
-    // 2. Build QR payload from barcode data
-    const qrPayload = barcodeData?.pdf417_data?.parsed_data ? {
-      first_name: barcodeData.pdf417_data.parsed_data.firstName || '',
-      last_name: barcodeData.pdf417_data.parsed_data.lastName || '',
-      full_name: [barcodeData.pdf417_data.parsed_data.firstName, barcodeData.pdf417_data.parsed_data.lastName].filter(Boolean).join(' '),
-      date_of_birth: barcodeData.pdf417_data.parsed_data.dateOfBirth || '',
-      id_number: barcodeData.pdf417_data.parsed_data.licenseNumber || barcodeData.parsed_data?.id_number || '',
-      expiry_date: barcodeData.pdf417_data.parsed_data.expirationDate || '',
-      nationality: '',
-      address: [
-        barcodeData.pdf417_data.parsed_data.address,
-        barcodeData.pdf417_data.parsed_data.city,
-        barcodeData.pdf417_data.parsed_data.state,
-        barcodeData.pdf417_data.parsed_data.zipCode,
-      ].filter(Boolean).join(', ') || '',
-    } : (barcodeData?.parsed_data ? {
-      first_name: barcodeData.parsed_data.first_name || '',
-      last_name: barcodeData.parsed_data.last_name || '',
-      full_name: [barcodeData.parsed_data.first_name, barcodeData.parsed_data.last_name].filter(Boolean).join(' '),
-      date_of_birth: barcodeData.parsed_data.date_of_birth || '',
-      id_number: barcodeData.parsed_data.id_number || '',
-      expiry_date: barcodeData.parsed_data.expiry_date || '',
-      nationality: '',
-      address: (barcodeData.parsed_data as any).address || '',
-    } : null);
+    // 2. MRZ : lecture tolérante et clés de contrôle (mrzReader). Un champ dont la clé est
+    //    fausse n'est pas repris ; les noms (ligne 3 du TD1, sans clé) restent sous 0,95.
+    const reading = rawText ? readMrzFromText(rawText) : null;
 
-    // 3. MRZ detection from raw OCR text
-    const rawText = barcodeData?.raw_text || '';
-    const mrzResult = extractMRZFromText(rawText);
+    let qrPayload: BackExtractionResult['qr_payload'] = null;
+    let barcodeFormat: BackExtractionResult['barcode_format'] = null;
+    let rawBarcode: string | null = null;
+    let mrzForGate: BackExtractionResult['mrz_result'] = null;
 
-    let finalQrPayload = qrPayload;
-    let barcodeFormat: 'PDF417' | 'QR_CODE' | 'DATA_MATRIX' | 'CODE_128' | 'MRZ_TD1' | 'MRZ_TD2' | 'MRZ_TD3' | null =
-      barcodeData?.pdf417_data ? 'PDF417' : (barcodeData?.barcode_data ? 'QR_CODE' : null);
+    if (reading) {
+      const f = reading.fields;
+      const usable = (x: { value: string | null; check: string }) => (x.value && x.check !== 'fausse' ? x.value : '');
+      const fields: Record<string, string> = {};
+      const put = (k: string, v: string) => { if (v) fields[k] = v; };
+      put('document_number', usable(f.document_number));
+      put('last_name', usable(f.last_name));
+      put('first_name', usable(f.first_names));
+      put('full_name', [usable(f.first_names), usable(f.last_name)].filter(Boolean).join(' '));
+      put('date_of_birth', usable(f.date_of_birth));
+      put('expiry_date', usable(f.expiry_date));
+      put('nationality', usable(f.nationality));
+      put('sex', usable(f.sex));
+      put('issuing_country', usable(f.issuing_country));
 
-    if (!qrPayload && mrzResult && mrzResult.fields) {
-      finalQrPayload = {
-        first_name: mrzResult.fields.first_name || '',
-        last_name: mrzResult.fields.last_name || '',
-        full_name: mrzResult.fields.full_name || '',
-        date_of_birth: mrzResult.fields.date_of_birth || '',
-        id_number: mrzResult.fields.document_number || '',
-        expiry_date: mrzResult.fields.expiry_date || '',
-        nationality: mrzResult.fields.nationality || '',
+      mrzForGate = {
+        raw_lines: reading.lines,
+        fields,
+        // Vrai seulement si toutes les clés sont justes, après correction éventuelle.
+        checksums_valid: reading.valid,
+        format: reading.format,
+        ocr_lines: reading.ocr_lines,
+        corrections: reading.corrections,
+        field_checks: reading.fields,
+      };
+      qrPayload = {
+        first_name: fields.first_name || '',
+        last_name: fields.last_name || '',
+        full_name: fields.full_name || '',
+        date_of_birth: fields.date_of_birth || '',
+        id_number: fields.document_number || '',
+        expiry_date: fields.expiry_date || '',
+        nationality: fields.nationality || '',
         address: '',
       };
-      const mrzFormatMap: Record<string, 'MRZ_TD1' | 'MRZ_TD2' | 'MRZ_TD3'> = {
-        TD1: 'MRZ_TD1', TD2: 'MRZ_TD2', TD3: 'MRZ_TD3',
-      };
-      barcodeFormat = mrzFormatMap[mrzResult.format] || null;
+      barcodeFormat = reading.lines.length === 3 ? 'MRZ_TD1' : reading.lines[0].length === 44 ? 'MRZ_TD3' : 'MRZ_TD2';
     }
 
-    const hasMrz = mrzResult !== null;
-    const mrzForGate = hasMrz ? {
-      raw_lines: mrzResult!.raw_lines,
-      fields: mrzResult!.fields as any,
-      checksums_valid: mrzResult!.check_digits_valid,
-    } : (rawText && /[A-Z<]{30,}/.test(rawText) ? {
-      raw_lines: rawText.split('\n').filter((l: string) => /^[A-Z0-9<]{30,}$/.test(l.trim())),
-      checksums_valid: true,
-    } : null);
+    // 3. Pas de MRZ juste : on tente un PDF417 (permis nord-américains). ZXing seul, sans Tesseract.
+    if (!reading?.valid) {
+      let pdf417 = null;
+      try {
+        pdf417 = await barcodeService.decodePDF417FromBuffer(oriented.buffer);
+      } catch {
+        pdf417 = null;
+      }
+      if (pdf417) {
+        const p = pdf417.parsed_data;
+        qrPayload = {
+          first_name: p.firstName || '',
+          last_name: p.lastName || '',
+          full_name: [p.firstName, p.lastName].filter(Boolean).join(' '),
+          date_of_birth: p.dateOfBirth || '',
+          id_number: p.licenseNumber || '',
+          expiry_date: p.expirationDate || '',
+          nationality: '',
+          address: [p.address, p.city, p.state, p.zipCode].filter(Boolean).join(', ') || '',
+        };
+        barcodeFormat = 'PDF417';
+        rawBarcode = pdf417.raw_data || null;
+      }
+    }
 
+    const hasMrz = reading !== null;
     const result: BackExtractionResult = {
-      qr_payload: finalQrPayload,
+      qr_payload: qrPayload,
       mrz_result: mrzForGate,
       barcode_format: barcodeFormat,
-      raw_barcode_data: barcodeData?.pdf417_data?.raw_data || barcodeData?.barcode_data || null,
+      raw_barcode_data: rawBarcode,
     };
 
     logger.info('Back extraction complete', {
       elapsedMs: Date.now() - start,
-      hasBarcode: !!finalQrPayload,
+      hasBarcode: barcodeFormat === 'PDF417',
       hasMrz,
+      mrzValid: reading?.valid ?? null,
+      rotatedBy: oriented.angle,
     });
 
     res.json({ success: true, result });
