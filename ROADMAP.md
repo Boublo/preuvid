@@ -228,7 +228,10 @@ Pas de cible pour l'extension.
   repris. Un nom sans clé n'est « sûr » que si la zone imprimée dit la même chose.
 - `engine/src/services/deskew.ts` : redressement par les quatre coins (OpenCV.js, déjà présent dans
   les dépendances). Il ne touche que les images inclinées ou en perspective. Sur le banc : 48/48, rien
-  d'autre de modifié, environ 45 ms par image.
+  d'autre de modifié, environ 45 ms par image. Sa mémoire est plafonnée : au-delà de 25 Mpx, l'image est
+  réduite avant la remise à plat, et une image annoncée à plus de 268 Mpx n'est pas décodée. Sans ce
+  plafond, un PNG de quelques Mo suffisait à saturer la mémoire du moteur. Banc relancé après le
+  correctif (`scores/2026-11-19-lot-1-durci.txt`) : scores identiques, pic mémoire 973 Mio.
 - `/extract/back` passe de Tesseract à PaddleOCR. Le faux `checksums_valid: true` de secours, renvoyé
   même pour des lignes non lues, est supprimé.
 - `/front` et `/back` ne réencodent plus la photo en JPEG qualité 80 avant lecture (comportement

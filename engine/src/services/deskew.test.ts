@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
+import { crc32 } from 'node:zlib';
 import { deskewDocument, orderCorners } from './deskew.js';
 
 // Carte synthétique : fond clair, quelques bandes sombres en guise de texte. Aucune donnée réelle.
@@ -61,4 +62,33 @@ describe('deskewDocument', () => {
     expect(r.applied).toBe(false);
     expect(r.buffer).toBe(pasUneImage);
   });
+
+  it("ne décode pas une image annoncée à plus de 268 Mpx", async () => {
+    // En-tête PNG seul (20 000 × 20 000 = 400 Mpx), sans données d'image.
+    const chunk = (type: string, data: Buffer) => {
+      const td = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+      const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+      const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td) >>> 0);
+      return Buffer.concat([len, td, crc]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(20_000, 0); ihdr.writeUInt32BE(20_000, 4); ihdr[8] = 8; ihdr[9] = 2;
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('IHDR', ihdr), chunk('IEND', Buffer.alloc(0))]);
+    const r = await deskewDocument(png);
+    // Refusée par notre plafond ou, avant lui, par celui de sharp : dans les deux cas, rien n'est décodé.
+    expect(r.applied).toBe(false);
+    expect(r.buffer).toBe(png);
+  });
+
+  it('plafonne la taille de la sortie pour une très grande photo', async () => {
+    // 6 400 × 4 800 = 30,7 Mpx, au-dessus du plafond de remise à plat (25 Mpx).
+    const c = await sharp(await carte(4200, 2650)).rotate(7, { background: { r: 60, g: 75, b: 95 } }).toBuffer();
+    const img = await sharp({ create: { width: 6400, height: 4800, channels: 3, background: { r: 60, g: 75, b: 95 } } })
+      .composite([{ input: c, gravity: 'center' }]).png({ compressionLevel: 1 }).toBuffer();
+    const r = await deskewDocument(img);
+    expect(r.applied).toBe(true);
+    const m = await sharp(r.buffer).metadata();
+    expect(m.width! * m.height!).toBeLessThanOrEqual(25_000_000);
+  }, 60_000);
 });

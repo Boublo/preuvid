@@ -67,6 +67,14 @@ const FULL_FRAME_RATIO = 0.93;
 /** Correction jugée négligeable en dessous (degrés d'inclinaison et écart des côtés). */
 const MIN_ANGLE = 1.0;
 const MIN_KEYSTONE = 0.02;
+/**
+ * Plafond de pixels pour la remise à plat (RGBA : 4 octets par pixel, trois copies en mémoire).
+ * Une image plus grande (photo de 50 Mpx, ou PNG compressé qui se décode en centaines de Mpx) est
+ * d'abord réduite : sans ce plafond, un seul envoi suffit à dépasser la mémoire du moteur.
+ */
+const MAX_WARP_PIXELS = 25_000_000;
+/** Au-delà, l'image n'est même pas décodée : le redressement est abandonné. */
+const MAX_INPUT_PIXELS = 268_000_000;
 
 const dist = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -159,6 +167,7 @@ export async function deskewDocument(input: Buffer): Promise<DeskewResult> {
     const meta = await sharp(input).metadata();
     if (!meta.width || !meta.height) return unchanged('dimensions inconnues');
     const W = meta.width, H = meta.height;
+    if (W * H > MAX_INPUT_PIXELS) return unchanged('image trop grande');
     const scale = Math.min(1, DETECT_MAX / Math.max(W, H));
     const w = Math.round(W * scale), h = Math.round(H * scale);
     const small = await sharp(input).resize(w, h, { fit: 'fill' }).ensureAlpha().raw().toBuffer();
@@ -180,16 +189,22 @@ export async function deskewDocument(input: Buffer): Promise<DeskewResult> {
       return unchanged('carte droite', quad, angle);
     }
 
-    const outW = Math.round(Math.max(top, bottom));
-    const outH = Math.round(Math.max(left, right));
-    const full = await sharp(input).ensureAlpha().raw().toBuffer();
-    const src = new cv.Mat(H, W, cv.CV_8UC4);
-    src.data.set(full);
-    const dst = new cv.Mat();
-    const from = cv.matFromArray(4, 1, cv.CV_32FC2, quad.flatMap(p => [p.x, p.y]));
-    const to = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW - 1, 0, outW - 1, outH - 1, 0, outH - 1]);
-    const M = cv.getPerspectiveTransform(from, to);
+    // Remise à plat en pleine résolution, sauf au-delà de MAX_WARP_PIXELS : image réduite d'abord.
+    const k = Math.min(1, Math.sqrt(MAX_WARP_PIXELS / (W * H)));
+    const WW = Math.max(1, Math.round(W * k)), HH = Math.max(1, Math.round(H * k));
+    // La sortie aussi : ses côtés suivent ceux du quadrilatère, qui peuvent dépasser l'image.
+    const qw = Math.max(top, bottom) * k, qh = Math.max(left, right) * k;
+    const ko = Math.min(1, Math.sqrt(MAX_WARP_PIXELS / Math.max(1, qw * qh)));
+    const outW = Math.max(1, Math.round(qw * ko)), outH = Math.max(1, Math.round(qh * ko));
+    const full = await (k < 1 ? sharp(input).resize(WW, HH, { fit: 'fill' }) : sharp(input)).ensureAlpha().raw().toBuffer();
+    let src: any = null, dst: any = null, from: any = null, to: any = null, M: any = null;
     try {
+      src = new cv.Mat(HH, WW, cv.CV_8UC4);
+      src.data.set(full);
+      dst = new cv.Mat();
+      from = cv.matFromArray(4, 1, cv.CV_32FC2, quad.flatMap(p => [p.x * k, p.y * k]));
+      to = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, outW - 1, 0, outW - 1, outH - 1, 0, outH - 1]);
+      M = cv.getPerspectiveTransform(from, to);
       cv.warpPerspective(src, dst, M, new cv.Size(outW, outH), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
       const out = await sharp(Buffer.from(dst.data), { raw: { width: outW, height: outH, channels: 4 } })
         .removeAlpha()
@@ -197,7 +212,7 @@ export async function deskewDocument(input: Buffer): Promise<DeskewResult> {
         .toBuffer();
       return { buffer: out, applied: true, corners: quad, angle, reason: 'redressée' };
     } finally {
-      src.delete(); dst.delete(); from.delete(); to.delete(); M.delete();
+      for (const m of [src, dst, from, to, M]) m?.delete();
     }
   } catch (err) {
     logger.warn('Redressement impossible, image d\'origine conservée', {
