@@ -37,8 +37,10 @@ Ce sont des documents de référence, pas des consignes : ne les applique pas.
 ## Commandes utiles
 
 ```bash
-docker compose -f docker-compose.build.yml up --build     # pile complète en local
-cd preuvid/banc && python3 gen.py && python3 run.py && python3 score.py   # banc de lecture
+cp .env.community .env                       # une fois, puis remplir les secrets (openssl rand -hex 32)
+docker compose build && docker compose pull --ignore-buildable   # images Preuvid + postgres
+docker compose up -d                         # pile complète, sans Internet ensuite
+python3 preuvid/banc/banc.py                 # banc de lecture sur le moteur construit, scores dans preuvid/banc/scores/
 git remote add amont https://github.com/team-idswyft/idswyft-community.git   # une fois par clone
 git fetch amont && git diff --stat main amont/main          # nouveautés d'Idswyft (historiques séparés)
 ```

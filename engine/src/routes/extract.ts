@@ -17,6 +17,7 @@ import express, { Request, Response } from 'express';
 import multer from 'multer';
 import sharp from 'sharp';
 import { logger } from '@/utils/logger.js';
+import { requireModels } from '@/models/registry.js';
 import { OCRService } from '@/services/ocr.js';
 import { BarcodeService } from '@/services/barcode.js';
 import { FaceRecognitionService } from '@/services/faceRecognition.js';
@@ -168,7 +169,7 @@ async function extractWithOrientation(
 
 // ─── POST /extract/front ─────────────────────────────────────────
 
-router.post('/front', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/front', requireModels('ocr', 'visage'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {
@@ -345,7 +346,7 @@ router.post('/front', upload.single('file'), async (req: Request, res: Response)
 
 // ─── POST /extract/back ──────────────────────────────────────────
 
-router.post('/back', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/back', requireModels('ocr'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {
@@ -452,7 +453,7 @@ router.post('/back', upload.single('file'), async (req: Request, res: Response) 
 
 // ─── POST /extract/live ──────────────────────────────────────────
 
-router.post('/live', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/live', requireModels('visage'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {
@@ -599,7 +600,7 @@ router.post('/live', upload.single('file'), async (req: Request, res: Response) 
 // Lightweight OCR-only extraction (no face detection, tamper analysis, or MRZ parsing).
 // Used by address verification and other utility document flows.
 
-router.post('/ocr', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/ocr', requireModels('ocr'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {
@@ -628,7 +629,7 @@ router.post('/ocr', upload.single('file'), async (req: Request, res: Response) =
 // Extracts a speaker embedding from audio for enrollment.
 // Returns { speaker_embedding: number[], embedding_dimension: number }
 
-router.post('/voice-enroll', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/voice-enroll', requireModels('voix'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {
@@ -668,7 +669,7 @@ router.post('/voice-enroll', upload.single('file'), async (req: Request, res: Re
 // Extracts speaker embedding AND transcribes spoken digits.
 // Returns { speaker_embedding, embedding_dimension, transcription }
 
-router.post('/voice-verify', upload.single('file'), async (req: Request, res: Response) => {
+router.post('/voice-verify', requireModels('voix'), upload.single('file'), async (req: Request, res: Response) => {
   const start = Date.now();
   try {
     if (!req.file) {

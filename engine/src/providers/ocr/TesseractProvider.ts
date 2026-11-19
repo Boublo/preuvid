@@ -2,6 +2,7 @@ import Tesseract from 'tesseract.js';
 import Jimp from 'jimp';
 import type { OCRProvider, OCRData } from '@idswyft/shared';
 import { logger } from '@/utils/logger.js';
+import { tesseractWorkerOptions } from '@/providers/ocr/tesseractOptions.js';
 
 export class TesseractProvider implements OCRProvider {
   readonly name = 'tesseract';
@@ -9,15 +10,18 @@ export class TesseractProvider implements OCRProvider {
   async processDocument(buffer: Buffer, documentType: string, _issuingCountry?: string): Promise<OCRData> {
     const preprocessed = await this.preprocessImage(buffer);
 
-    const worker = await Tesseract.createWorker('eng', 1, {});
-    await worker.setParameters({
-      tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/-: ',
-      tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
-      preserve_interword_spaces: '1',
-    });
-
-    const { data } = await worker.recognize(preprocessed);
-    await worker.terminate();
+    const worker = await Tesseract.createWorker('eng', 1, tesseractWorkerOptions());
+    let data: Tesseract.Page;
+    try {
+      await worker.setParameters({
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/-: ',
+        tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+        preserve_interword_spaces: '1',
+      });
+      ({ data } = await worker.recognize(preprocessed));
+    } finally {
+      await worker.terminate();
+    }
 
     return this.extractStructuredData(data.text, documentType);
   }

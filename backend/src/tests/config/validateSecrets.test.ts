@@ -61,4 +61,32 @@ describe('validateSecrets', () => {
       serviceToken: VALID_SERVICE,
     })).not.toThrow();
   });
+
+  // Preuvid (lot 0) : variantes longues des valeurs d'exemple.
+  it('refuse la valeur JWT de l’ancien .env.example malgré sa longueur', () => {
+    expect(() => validateSecrets({
+      jwtSecret: 'your-super-secret-jwt-key-change-this-in-production',
+      apiKeySecret: VALID_API_KEY,
+      encryptionKey: VALID_ENCRYPTION,
+      serviceToken: VALID_SERVICE,
+    })).toThrow('JWT_SECRET must be changed from the default value');
+  });
+
+  it('refuse un secret long sans entropie', () => {
+    expect(() => validateSecrets({
+      jwtSecret: VALID_JWT,
+      apiKeySecret: VALID_API_KEY,
+      encryptionKey: VALID_ENCRYPTION,
+      serviceToken: '0'.repeat(64),
+    })).toThrow('SERVICE_TOKEN must be changed from the default value');
+  });
+
+  it('refuse un texte d’exemple dans ENCRYPTION_KEY', () => {
+    expect(() => validateSecrets({
+      jwtSecret: VALID_JWT,
+      apiKeySecret: VALID_API_KEY,
+      encryptionKey: 'placeholder-placeholder-placeholder',
+      serviceToken: VALID_SERVICE,
+    })).toThrow('ENCRYPTION_KEY must be changed from the default value');
+  });
 });

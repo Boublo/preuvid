@@ -1,0 +1,20 @@
+# Contexte de construction des images moteur et API (racine du dépôt).
+# Rien de local ne doit entrer dans une image : dépendances, modèles,
+# secrets, images du banc.
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+.env
+.env.*
+!.env.example
+!.env.community
+**/*.log
+engine/models
+preuvid/banc/img
+preuvid/banc/results.jsonl
+preuvid/banc/truth.json
+backend/uploads
+backend/temp
+**/.cache

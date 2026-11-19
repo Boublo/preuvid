@@ -98,6 +98,7 @@ def degrade(im,cond,seed):
 CONDS=['propre','flou','rotation','perspective','basse_resolution','jpeg_fort','reflet','sombre_bruit']
 if __name__=="__main__":
     n=int(sys.argv[1]) if len(sys.argv)>1 else 8
+    os.makedirs("img",exist_ok=True)  # cv2.imwrite échoue sans rien dire si le dossier manque
     rng=random.Random(20261118); truth=[]
     for i in range(n):
         idt=identity(rng)

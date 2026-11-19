@@ -12,7 +12,8 @@
     "generate:narration": "node scripts/generate-narration.mjs",
     "generate:keyboard-fx": "node scripts/generate-keyboard-fx.mjs",
     "generate:all-audio": "node scripts/generate-keyboard-fx.mjs && node scripts/generate-narration.mjs",
-    "render:demo": "npx remotion render src/remotion/index.ts DeveloperIntegrationDemo out/developer-integration-demo.mp4 --props='{\"narration\":true}'"
+    "render:demo": "npx remotion render src/remotion/index.ts DeveloperIntegrationDemo out/developer-integration-demo.mp4 --props='{\"narration\":true}'",
+    "test": "vitest run"
   },
   "dependencies": {
     "@headlessui/react": "^1.7.17",

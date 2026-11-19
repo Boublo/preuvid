@@ -1,4 +1,4 @@
-import sharp from 'sharp';
+import sharp, { type Stats } from 'sharp';
 import { logger } from '@/utils/logger.js';
 import { FrequencyAnalyzer } from './FrequencyAnalyzer.js';
 import type { FrequencyAnalysisResult } from './FrequencyAnalyzer.js';
@@ -160,7 +160,7 @@ export class SharpTamperDetector {
    * Printed/scanned copies: abnormal uniformity (stdev < 20 per channel)
    * Digital copies: decorrelated RGB channels (stdev ratios far from 1.0)
    */
-  private analyzeColorHistogram(stats: sharp.Stats): { score: number; anomalies: string[] } {
+  private analyzeColorHistogram(stats: Stats): { score: number; anomalies: string[] } {
     const anomalies: string[] = [];
     const channels = stats.channels;
 
@@ -210,7 +210,7 @@ export class SharpTamperDetector {
    */
   private async detectDoubleCompression(
     imageBuffer: Buffer,
-    originalStats: sharp.Stats,
+    originalStats: Stats,
   ): Promise<{ detected: boolean; regionVariance: number }> {
     const meta = await sharp(imageBuffer).metadata();
     const width = meta.width || 0;

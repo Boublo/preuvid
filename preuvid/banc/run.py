@@ -1,9 +1,11 @@
 import json, subprocess, sys, time, os
+ENGINE_URL=os.environ.get('ENGINE_URL','http://127.0.0.1:3002').rstrip('/')
+if not os.path.exists('results.jsonl'): open('results.jsonl','w').close()
 truth=json.load(open('truth.json')); out=open('results.jsonl','a')
 done={json.loads(l)['key'] for l in open('results.jsonl')} if os.path.getsize('results.jsonl') else set()
 def call(route,f):
     t=time.time()
-    r=subprocess.run(['curl','-s','--noproxy','*','--max-time','90','-F',f'file=@{f}','-F','issuing_country=FR',f'http://127.0.0.1:3002/extract/{route}'],capture_output=True,text=True)
+    r=subprocess.run(['curl','-s','--noproxy','*','--max-time','90','-F',f'file=@{f}','-F','issuing_country=FR',f'{ENGINE_URL}/extract/{route}'],capture_output=True,text=True)
     try: d=json.loads(r.stdout)
     except Exception: d={'success':False,'error':'no-json','raw':r.stdout[:200]}
     return d, round(time.time()-t,2)
