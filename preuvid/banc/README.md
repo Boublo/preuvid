@@ -7,9 +7,9 @@ Images **synthétiques**, identités **fictives** : aucune donnée de vraie pers
 
 | Fichier | Rôle |
 |---|---|
-| `gen.py` | Génère 192 images (8 identités × 3 documents × 8 conditions) et `truth.json` (vérité terrain) |
+| `gen.py` | Génère 360 images et `truth.json` (vérité terrain) : le socle de 192 (8 identités × 3 documents × 8 conditions), puis l'extension du lot 1 (168) |
 | `run.py` | Envoie chaque image au moteur (`http://127.0.0.1:3002/extract/front` ou `/back`) et écrit `results.jsonl` |
-| `score.py` | Compare `results.jsonl` à `truth.json` et affiche les scores par document et par condition |
+| `score.py` | Compare `results.jsonl` à `truth.json`, affiche les scores par document et par condition, et liste les champs faux rendus avec une confiance ≥ 0,95 (« faux sûrs », doit rester vide) |
 | `mrz-fr.mjs` | Vérifie que la bibliothèque `mrz` décode les trois formats français (spécimens publics) |
 | `scores-reference-idswyft-1.12.39.txt` | Scores du moteur d'origine, le 18/11/2026 : la ligne de base à battre (non reproductible, voir ci-dessous) |
 | `resultats-reference-idswyft-1.12.39.jsonl` | Résultats bruts correspondants |
@@ -23,6 +23,13 @@ la machine de mesure : deux passages donnent les mêmes 256 réponses, au chiffr
 
 Documents : CNI 2021 (MRZ TD1, 3×30, au verso), ancienne CNI (2×36, format français), passeport (TD3, 2×44).
 Conditions : propre, flou, rotation 7°, perspective, basse résolution, JPEG fort, reflet, sombre + bruit.
+
+Extension du lot 1, notée à part (lignes `extension` et `ext:…`) pour que le tableau du socle reste
+comparable d'un lot à l'autre : la condition « doigt sur la carte » sur les trois documents du socle,
+puis le titre de séjour (TD1 « IR », 3×30, nationalités étrangères) et le permis format carte (ligne
+`D1FRA` de 30 caractères) dans les neuf conditions. Simplification : la ligne MRZ du permis est imprimée
+sur l'image du recto, sous les rubriques numérotées. Les identités de l'extension sont tirées d'une graine
+à part : les 192 images du socle restent identiques à l'octet.
 
 ## Lancer
 

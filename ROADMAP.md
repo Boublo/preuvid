@@ -1,6 +1,6 @@
 # Preuvid — feuille de route
 
-État au 18 novembre 2026 : dépôt créé à partir d'Idswyft v1.12.39, aucun code Preuvid écrit.
+État au 19 novembre 2026 : lot 0 en revue (PR 1), lot 1 terminé et en revue. Dépôt créé à partir d'Idswyft v1.12.39.
 Six lots dans l'ordre, puis une étude (lot 6). Chaque lot se termine par ses critères de fin, pas par une date.
 
 ## Point de départ mesuré
@@ -180,18 +180,113 @@ Score « TOUT » (tous les champs justes) :
 
 But : atteindre les cibles du tableau.
 
-- [ ] Verso et bande MRZ lus par PaddleOCR (ou un modèle dédié OCR-B), plus par Tesseract.
-- [ ] Redressement avant lecture : détection des quatre coins, correction de perspective et de rotation.
-- [ ] Localisation de la bande MRZ, puis décodage par la bibliothèque `mrz` (TD1 CNI 2021, format
+- [x] Verso et bande MRZ lus par PaddleOCR (ou un modèle dédié OCR-B), plus par Tesseract.
+- [x] Redressement avant lecture : détection des quatre coins, correction de perspective et de rotation.
+- [x] Localisation de la bande MRZ, puis décodage par la bibliothèque `mrz` (TD1 CNI 2021, format
       ancienne CNI 2 × 36, TD3 passeport).
-- [ ] Correction par clés de contrôle : essayer les confusions usuelles (O/0, I/1, B/8, S/5, Z/2) tant que
+- [x] Correction par clés de contrôle : essayer les confusions usuelles (O/0, I/1, B/8, S/5, Z/2) tant que
       la clé est fausse ; ne jamais « corriger » un champ dont la clé est juste.
-- [ ] Prénoms conservés (tous, dans l'ordre).
-- [ ] Réponse du moteur : pour chaque champ, valeur, clé de contrôle (juste / fausse / corrigée), confiance.
-- [ ] Étendre le banc : titre de séjour, permis format carte, reflets, doigt sur la carte.
-- [ ] Mesurer le temps et la mémoire par image ; en déduire un premier coût par vérification.
+- [x] Prénoms conservés (tous, dans l'ordre).
+- [x] Réponse du moteur : pour chaque champ, valeur, clé de contrôle (juste / fausse / corrigée), confiance.
+- [x] Étendre le banc : titre de séjour, permis format carte, reflets, doigt sur la carte.
+- [x] Mesurer le temps et la mémoire par image ; en déduire un premier coût par vérification.
+      *Coût exprimé en temps machine ; le prix en euros attend `[PRIX DU SERVEUR]`.*
 
 Fin du lot : cibles atteintes ou écart expliqué par écrit, aucun champ faux présenté comme sûr.
+
+### Bilan du lot 1 (19/11/2026)
+
+**Scores** (`preuvid/banc/scores/2026-11-19-lot-1-lecture.txt`, socle de 192 images inchangé, part des
+images dont tous les champs sont justes) :
+
+| Pièce | Idswyft 1.12.39 | Lot 0 | Lot 1 | Cible |
+|---|---|---|---|---|
+| CNI 2021, verso (`/extract/back`) | 0 % | 0 % | 95 % | 90 % |
+| CNI 2021, via `/front` | 69 % | 64 % | 95 % | 90 % |
+| Ancienne CNI | 3 % | 6 % | 94 % | 85 % |
+| Passeport | 8 % | 8 % | 97 % | 90 % |
+
+Les quatre cibles sont atteintes. **Aucun champ faux présenté comme sûr** (confiance ≥ 0,95) sur les
+432 appels, extension comprise. `score.py` imprime désormais ce compte. Il porte sur le détail champ par
+champ (`mrz_fields` de `/front`, `field_checks` de `/back`) et sur les champs de premier niveau `ocr.*`
+de `/front` avec leurs `confidence_scores`, tels que l'API les rend. Sans MRZ trouvée, `/front` rend les
+confiances de l'OCR telles quelles : une confiance haute n'y vaut pas vérification.
+
+**Extension du banc** (168 images, notées à part pour que le tableau reste comparable au lot 0) :
+- doigt sur la carte, sur les trois pièces du socle : 100 % sur la CNI 2021 (recto et verso) et sur le passeport, 88 % sur l'ancienne CNI ;
+- titre de séjour (TD1 « IR », nationalité étrangère) : 86 %. Les échecs viennent du numéro, mal lu sur les images floues, en perspective, à reflet ou sombres ; il n'est jamais présenté comme sûr ;
+- permis format carte (ligne `D1FRA` de 30 caractères) : 97 %.
+Pas de cible pour l'extension.
+
+**Ce qui a été fait (moteur)** :
+- `engine/src/services/mrzReader.ts` : lecteur MRZ tolérant sur le texte de PaddleOCR. Il localise le
+  bloc, retaille les lignes, rétablit le remplissage et l'en-tête, corrige par les clés (une seule
+  substitution, et seulement si elle est unique), puis décode avec `mrz`. Pour chaque champ, il donne la
+  valeur, la clé (juste / corrigée / fausse / sans clé) et la confiance. Formats lus : CNI 2021, ancienne
+  CNI, passeport, titre de séjour, permis.
+- `engine/src/services/mrzMerge.ts` : fusion MRZ et zone imprimée. Un champ à clé fausse n'est jamais
+  repris. Un nom sans clé n'est « sûr » que si la zone imprimée dit la même chose.
+- `engine/src/services/deskew.ts` : redressement par les quatre coins (OpenCV.js, déjà présent dans
+  les dépendances). Il ne touche que les images inclinées ou en perspective. Sur le banc : 48/48, rien
+  d'autre de modifié, environ 45 ms par image. Sa mémoire est plafonnée : au-delà de 25 Mpx, l'image est
+  réduite avant la remise à plat, et une image annoncée à plus de 268 Mpx n'est pas décodée. Sans ce
+  plafond, un PNG de quelques Mo suffisait à saturer la mémoire du moteur. Banc relancé après le
+  correctif (`scores/2026-11-19-lot-1-durci.txt`) : scores identiques, pic mémoire 973 Mio.
+- `/extract/back` passe de Tesseract à PaddleOCR. Le faux `checksums_valid: true` de secours, renvoyé
+  même pour des lignes non lues, est supprimé.
+- `/front` et `/back` ne réencodent plus la photo en JPEG qualité 80 avant lecture (comportement
+  d'Idswyft) : seulement si l'EXIF demande une rotation, et alors sans perte. Sur les images sombres et
+  bruitées, le gain net est d'une image : `cni2021_04` et `_07` sont rattrapées, `cni2021_03` est perdue
+  (prénom lu « ZNES »).
+
+**Temps et mémoire** (moteur limité à 2 processeurs et 3 Gio, appels un par un) :
+- par image : CNI 2021 recto 2,8 s, verso 3,1 s ; ancienne CNI 5,6 s ; passeport 7,0 s ;
+- mémoire du moteur : pic 1 022 Mio, moyenne 907 Mio, à peu près constante ;
+- une vérification CNI 2021 (recto et verso) prend donc environ 6 s de calcul sur 2 processeurs,
+  soit environ 600 vérifications par heure pour une instance du moteur ;
+- coût de lecture par vérification ≈ `[PRIX DU SERVEUR À L'HEURE]` / 600. La comparaison de visage
+  et la détection de présence (lot 3) ne sont pas comptées. Le temps processeur exact n'est pas
+  relevé (au plus 2 × le temps mesuré).
+
+**Écarts et limites** :
+- Deux images de la condition « sombre et bruité » lisaient bien les prénoms avec Idswyft et ne le font
+  plus (`cni2021_03` et `_05`, via `/front`) : l'OCR lit « ZNES » et « IES » pour INES. `_05` était déjà
+  perdue avant l'arrêt du réencodage, `_03` l'est depuis (voir plus haut). Ces prénoms n'ont
+  pas de clé de contrôle, et le verso de la CNI 2021 ne les imprime pas : il n'y a rien pour recouper.
+  Ils sont rendus avec une confiance de 0,9, donc non sûrs. C'est la condition la plus faible
+  (62 % sur la CNI 2021).
+- Les passages du banc ont révélé trois défauts, corrigés :
+  - un titre de séjour émis par la France à un étranger se voyait attribuer l'État de sa nationalité ;
+  - un nom de permis lu avec des zéros (« 0KAF0R ») était gardé ;
+  - un numéro mal lu, dont seule la clé composite passait par hasard, sortait comme « sûr ». C'était le
+    seul champ faux présenté comme sûr, sur 432 appels ;
+  - quand la MRZ invalidait un champ, la valeur de l'OCR restait dans `ocr.*` avec sa propre confiance
+    (souvent 0,99) : elle est maintenant plafonnée sous le seuil « sûr ».
+  Chaque cas a son test. S'y ajoutent l'en-tête « IDFRA » de l'ancienne CNI lu « DFRA », et les prénoms
+  du permis quand l'OCR perd le numéro de rubrique.
+- Banc : la ligne MRZ du permis est imprimée sur l'image du recto, par simplification (elle est au verso
+  sur le vrai titre).
+- L'analyse de falsification de `/front` voit l'image avant redressement et avant la rotation de 90°.
+  Elle voit maintenant le fichier d'origine (EXIF conservé) et non plus une copie réencodée.
+- **Verso illisible ou clé fausse (gate 2, tranché par David le 19/11/2026).**
+  - Avant ce lot, `/back` répondait `checksums_valid: true` même pour des lignes qu'il n'avait pas lues :
+    la gate 2 ne se déclenchait jamais. Il dit maintenant la vérité, et la gate 2 rejetait alors comme
+    falsifié un verso simplement mal lu (sur le banc : 1 verso de CNI 2021 sur 64, photo sombre et
+    bruitée, « TK2Z2DEVY » lu « TK2ZZDEVY »).
+  - Une clé fausse seule ne prouve rien : l'OCR qui se trompe d'un caractère donne le même symptôme.
+    La gate 2 rejette donc pour falsification (`BACK_MRZ_CHECKSUM_FAILED`) seulement si un champ dont
+    la propre clé est fausse (numéro, naissance, expiration) porte la même valeur que le recto, lu
+    séparément. Sinon : `BACK_MRZ_UNREADABLE`, avec une demande de nouvelle photo. Un recto qui a sa
+    propre MRZ ne compte pas comme lecture indépendante.
+  - Les deux cas restent des rejets. Limite : une retouche des seules données couvertes par la clé
+    composite (zone facultative) passe pour « illisible ».
+- Hors lot 1, non modifiés :
+  - le repli local du backend lit encore le verso avec Tesseract ;
+  - `/extract/ocr` lit la date de naissance au format mois/jour (1952-08-01 au lieu de 1952-01-08).
+- Cache de PaddleOCR (point 1 « À trancher ») : non modifié. La clé porte sur les 1 024 premiers octets
+  du fichier encodé et sur sa taille ; une collision demande deux fichiers de même taille à l'octet.
+  Aucune lecture d'une autre identité n'a été observée sur les 432 appels. Le risque sur les données en
+  mémoire reste entier ; la décision revient toujours à David.
 
 ## Lot 2 — API Preuvid v1
 

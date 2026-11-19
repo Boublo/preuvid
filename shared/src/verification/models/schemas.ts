@@ -9,6 +9,8 @@ export const RejectionReason = {
   FRONT_LOW_CONFIDENCE: 'FRONT_LOW_CONFIDENCE',
   BACK_BARCODE_NOT_FOUND: 'BACK_BARCODE_NOT_FOUND',
   BACK_MRZ_CHECKSUM_FAILED: 'BACK_MRZ_CHECKSUM_FAILED',
+  /** Preuvid : clé MRZ fausse sans confirmation par le recto, donc lecture douteuse (nouvelle photo). */
+  BACK_MRZ_UNREADABLE: 'BACK_MRZ_UNREADABLE',
   BACK_MRZ_BARCODE_MISMATCH: 'BACK_MRZ_BARCODE_MISMATCH',
   CROSS_VALIDATION_FAILED: 'CROSS_VALIDATION_FAILED',
   DOCUMENT_EXPIRED: 'DOCUMENT_EXPIRED',
@@ -30,6 +32,7 @@ const RejectionReasonEnum = z.enum([
   'FRONT_LOW_CONFIDENCE',
   'BACK_BARCODE_NOT_FOUND',
   'BACK_MRZ_CHECKSUM_FAILED',
+  'BACK_MRZ_UNREADABLE',
   'BACK_MRZ_BARCODE_MISMATCH',
   'CROSS_VALIDATION_FAILED',
   'DOCUMENT_EXPIRED',
@@ -81,6 +84,21 @@ const DocumentAuthenticitySchema = z.object({
   zoneScore: z.number().min(0).max(1).optional(),
 }).optional();
 
+// --- Champ issu de la MRZ, avec le statut de sa clé de contrôle (lot 1 Preuvid) ---
+const MergedFieldSchema = z.object({
+  value: z.string().nullable(),
+  check: z.enum(['juste', 'corrigee', 'fausse', 'sans_cle', 'absent']),
+  source: z.enum(['mrz', 'zone_imprimee', 'concordants']).nullable(),
+  confidence,
+});
+
+const MrzCorrectionSchema = z.object({
+  line: z.number().int(),
+  column: z.number().int(),
+  original: z.string(),
+  corrected: z.string(),
+});
+
 // --- Front Extraction Result ---
 export const FrontExtractionResultSchema = z.object({
   ocr: IDCardOCRSchema,
@@ -88,6 +106,10 @@ export const FrontExtractionResultSchema = z.object({
   face_confidence: confidence,
   ocr_confidence: confidence,
   mrz_from_front: z.array(z.string()).nullable(),
+  // Lot 1 Preuvid : statut des clés MRZ et détail champ par champ (ajouts, facultatifs).
+  mrz_valid: z.boolean().nullable().optional(),
+  mrz_fields: z.record(MergedFieldSchema).nullable().optional(),
+  mrz_corrections: z.array(MrzCorrectionSchema).nullable().optional(),
   authenticity: DocumentAuthenticitySchema,
   face_age: z.number().optional(),
   face_gender: z.string().optional(),

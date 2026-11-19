@@ -1,0 +1,77 @@
+# Banc Preuvid — 2026-11-19
+# moteur : preuvid/engine:local (sha256:d51094a2863663bdb2e150d77645f69afc36bd31c97c57a7eae66d1b6f4441cd)
+# banc   : preuvid/banc:local (sha256:37b69a22f0a1c84d779dbad5c0cb0c7860137c80fe3e3daec0fbe524f9f894a0)
+# réseau : interne, sans Internet
+# mémoire du moteur (limite 3 Gio, 2 processeurs) : pic 973 Mio, moyenne 892 Mio (670 relevés)
+
+== Par document ==
+cni2021 / back                             n= 64 MRZ   95% num   98% naiss   98% exp   98% nom  100% nom+prénoms   97% TOUT   95% err=0 3.4s
+cni2021 / front                            n= 64 MRZ   95% num  100% naiss   98% exp  100% nom  100% nom+prénoms   97% TOUT   95% err=0 2.7s
+cni_old / front                            n= 64 MRZ   94% num  100% naiss  100% exp   —  nom   98% nom+prénoms   98% TOUT   94% err=0 5.7s
+passport / front                           n= 64 MRZ   97% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   97% err=0 7.4s
+
+== Par condition ==
+cni2021 / back / basse_resolution          n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.1s
+cni2021 / back / ext:doigt                 n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.3s
+cni2021 / back / extension                 n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.3s
+cni2021 / back / flou                      n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.0s
+cni2021 / back / jpeg_fort                 n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.5s
+cni2021 / back / perspective               n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.5s
+cni2021 / back / propre                    n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.7s
+cni2021 / back / reflet                    n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.4s
+cni2021 / back / rotation                  n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.6s
+cni2021 / back / sombre_bruit              n=  8 MRZ   62% num   88% naiss   88% exp   88% nom  100% nom+prénoms   75% TOUT   62% err=0 3.7s
+cni2021 / front / basse_resolution         n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 1.5s
+cni2021 / front / ext:doigt                n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.6s
+cni2021 / front / extension                n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.6s
+cni2021 / front / flou                     n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.6s
+cni2021 / front / jpeg_fort                n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.5s
+cni2021 / front / perspective              n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.7s
+cni2021 / front / propre                   n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.6s
+cni2021 / front / reflet                   n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 2.6s
+cni2021 / front / rotation                 n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 3.6s
+cni2021 / front / sombre_bruit             n=  8 MRZ   62% num  100% naiss   88% exp  100% nom  100% nom+prénoms   75% TOUT   62% err=0 2.6s
+cni_old / front / basse_resolution         n=  8 MRZ  100% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT  100% err=0 4.2s
+cni_old / front / ext:doigt                n=  8 MRZ   88% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT   88% err=0 5.4s
+cni_old / front / extension                n=  8 MRZ   88% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT   88% err=0 5.4s
+cni_old / front / flou                     n=  8 MRZ   88% num  100% naiss  100% exp   —  nom   88% nom+prénoms   88% TOUT   88% err=0 5.9s
+cni_old / front / jpeg_fort                n=  8 MRZ  100% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT  100% err=0 5.7s
+cni_old / front / perspective              n=  8 MRZ   88% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT   88% err=0 6.5s
+cni_old / front / propre                   n=  8 MRZ  100% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT  100% err=0 5.6s
+cni_old / front / reflet                   n=  8 MRZ  100% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT  100% err=0 5.8s
+cni_old / front / rotation                 n=  8 MRZ   88% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT   88% err=0 6.5s
+cni_old / front / sombre_bruit             n=  8 MRZ   88% num  100% naiss  100% exp   —  nom  100% nom+prénoms  100% TOUT   88% err=0 5.6s
+passport / front / basse_resolution        n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 4.7s
+passport / front / ext:doigt               n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 7.0s
+passport / front / extension               n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 7.0s
+passport / front / flou                    n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 9.5s
+passport / front / jpeg_fort               n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.9s
+passport / front / perspective             n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 8.4s
+passport / front / propre                  n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 7.2s
+passport / front / reflet                  n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 7.0s
+passport / front / rotation                n=  8 MRZ   88% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   88% err=0 8.8s
+passport / front / sombre_bruit            n=  8 MRZ   88% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   88% err=0 7.1s
+permis / front / ext:basse_resolution      n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 4.1s
+permis / front / ext:doigt                 n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.2s
+permis / front / ext:flou                  n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms   75% TOUT   75% err=0 4.9s
+permis / front / ext:jpeg_fort             n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.1s
+permis / front / ext:perspective           n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.1s
+permis / front / ext:propre                n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.4s
+permis / front / ext:reflet                n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.3s
+permis / front / ext:rotation              n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.0s
+permis / front / ext:sombre_bruit          n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.3s
+permis / front / extension                 n= 72 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms   97% TOUT   97% err=0 5.3s
+titre_sejour / front / ext:basse_resolution n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 5.0s
+titre_sejour / front / ext:doigt           n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.5s
+titre_sejour / front / ext:flou            n=  8 MRZ   75% num   88% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   75% err=0 5.9s
+titre_sejour / front / ext:jpeg_fort       n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.1s
+titre_sejour / front / ext:perspective     n=  8 MRZ   75% num   88% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   75% err=0 7.2s
+titre_sejour / front / ext:propre          n=  8 MRZ  100% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT  100% err=0 6.2s
+titre_sejour / front / ext:reflet          n=  8 MRZ   75% num   88% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   75% err=0 6.6s
+titre_sejour / front / ext:rotation        n=  8 MRZ   88% num  100% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   88% err=0 7.2s
+titre_sejour / front / ext:sombre_bruit    n=  8 MRZ   62% num   75% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   62% err=0 6.2s
+titre_sejour / front / extension           n= 72 MRZ   86% num   93% naiss  100% exp  100% nom  100% nom+prénoms  100% TOUT   86% err=0 6.3s
+
+total appels: 432
+
+== Champs faux présentés comme sûrs (confiance ≥ 0.95) : 0 ==

@@ -11,7 +11,7 @@ machine (polices, versions de Pillow/OpenCV) :
   1. construit l'image du banc (preuvid/banc/Dockerfile, versions figées) ;
   2. démarre le moteur sur un réseau Docker interne, sans accès à Internet
      (sauf --reseau-ouvert, nécessaire au moteur d'origine) ;
-  3. génère les 192 images, envoie les 256 appels, calcule les scores ;
+  3. génère les 360 images (192 du socle + 168 d'extension), envoie les appels, calcule les scores ;
   4. écrit dans preuvid/banc/scores/ :
        AAAA-MM-JJ-<nom>.txt               scores (avec images Docker utilisées)
        AAAA-MM-JJ-<nom>-results.jsonl     résultats bruts
@@ -23,8 +23,10 @@ Seule dépendance sur l'hôte : Docker et Python 3 (bibliothèque standard).
 import argparse
 import datetime as dt
 import pathlib
+import re
 import subprocess
 import sys
+import threading
 
 ICI = pathlib.Path(__file__).resolve().parent
 SCORES = ICI / 'scores'
@@ -49,12 +51,45 @@ def image_id(image):
     return r.stdout.strip() if r.returncode == 0 else None
 
 
+def octets(txt):
+    m = re.match(r'([\d.]+)\s*([KMGT]?i?B)', txt.strip())
+    if not m:
+        return 0
+    mult = {'B': 1, 'KiB': 2**10, 'MiB': 2**20, 'GiB': 2**30, 'TiB': 2**40,
+            'kB': 1e3, 'KB': 1e3, 'MB': 1e6, 'GB': 1e9, 'TB': 1e12}.get(m.group(2), 1)
+    return float(m.group(1)) * mult
+
+
+class Memoire(threading.Thread):
+    """Relève la mémoire du conteneur moteur toutes les 2 s (docker stats) : pic et moyenne."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.arret = threading.Event()
+        self.mesures = []
+
+    def run(self):
+        while not self.arret.is_set():
+            r = docker('stats', '--no-stream', '--format', '{{.MemUsage}}', MOTEUR, check=False, capture=True)
+            if r.returncode == 0 and r.stdout.strip():
+                self.mesures.append(octets(r.stdout.split('/')[0]))
+            self.arret.wait(2)
+
+    def resume(self):
+        if not self.mesures:
+            return 'non mesurée'
+        mo = [m / 2**20 for m in self.mesures]
+        return f'pic {max(mo):.0f} Mio, moyenne {sum(mo) / len(mo):.0f} Mio ({len(mo)} relevés)'
+
+
 def nettoyer():
     docker('rm', '-f', MOTEUR, check=False, capture=True)
     docker('network', 'rm', RESEAU, check=False, capture=True)
 
 
 def main():
+    # Console Windows en cp1252 : les scores contiennent « ≥ ».
+    sys.stdout.reconfigure(encoding='utf-8')
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument('--moteur', default='preuvid/engine:local', help="image du moteur à mesurer")
     p.add_argument('--nom', default=None, help="libellé des fichiers de scores (défaut : dérivé de l'image)")
@@ -76,6 +111,7 @@ def main():
     docker('build', '-q', '-t', IMAGE_BANC, str(ICI))
 
     nettoyer()
+    mem = 'non mesurée'
     try:
         reseau = ['network', 'create'] + ([] if a.reseau_ouvert else ['--internal']) + [RESEAU]
         docker(*reseau, capture=True)
@@ -99,12 +135,17 @@ if [ -f /depot/{a.reference} ]; then
   python compare.py /depot/{a.reference} results.jsonl > /sortie/{base}-comparaison.txt
 fi
 """
-        print('[banc] génération, 256 appels au moteur, scores (environ 15 min)')
+        print('[banc] génération, environ 430 appels au moteur, scores (environ 30 min)')
+        memoire = Memoire()
+        memoire.start()
         docker('run', '--rm', '--network', RESEAU,
                '-e', f'ENGINE_URL={url}',
                '-v', f'{SCORES}:/sortie',
                '-v', f'{ICI}:/depot:ro',
                IMAGE_BANC, 'sh', '-c', script)
+        memoire.arret.set()
+        memoire.join()
+        mem = memoire.resume()
     finally:
         journal = docker('logs', '--tail', '200', MOTEUR, check=False, capture=True)
         if journal.returncode == 0:
@@ -117,7 +158,8 @@ fi
         f'# Banc Preuvid — {jour}\n'
         f'# moteur : {a.moteur} ({image_id(a.moteur)})\n'
         f'# banc   : {IMAGE_BANC} ({image_id(IMAGE_BANC)})\n'
-        f"# réseau : {'ouvert' if a.reseau_ouvert else 'interne, sans Internet'}\n\n"
+        f"# réseau : {'ouvert' if a.reseau_ouvert else 'interne, sans Internet'}\n"
+        f"# mémoire du moteur (limite 3 Gio, 2 processeurs) : {mem}\n\n"
     )
     sortie = SCORES / f'{base}.txt'
     sortie.write_text(entete + brut.read_text(encoding='utf-8'), encoding='utf-8')

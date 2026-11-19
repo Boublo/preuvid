@@ -180,6 +180,17 @@ export class BarcodeService {
     return this.scanWithPDF417AndOCRFromBuffer(imageBuffer);
   }
 
+  /**
+   * PDF417 seul (ZXing), sans passe Tesseract. Preuvid lit le texte du verso avec PaddleOCR
+   * (routes/extract.ts) ; ce décodage ne sert qu'aux pièces étrangères qui portent un PDF417.
+   */
+  async decodePDF417FromBuffer(imageBuffer: Buffer): Promise<PDF417Data | null> {
+    const raw = await this.detectPDF417WithZXingFromBuffer(imageBuffer);
+    if (!raw) return null;
+    const parsed = await this.parsePDF417(raw);
+    return parsed.validation_status !== 'invalid' ? parsed : null;
+  }
+
   private async scanWithPDF417AndOCRFromBuffer(imageBuffer: Buffer): Promise<BackOfIdData> {
     try {
       // First try proper PDF417 barcode detection with ZXing

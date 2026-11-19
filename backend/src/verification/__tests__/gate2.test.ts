@@ -69,10 +69,11 @@ describe('Gate 2 — Back Document Integrity', () => {
     expect(result.passed).toBe(true);
   });
 
-  it('FAILS with BACK_MRZ_CHECKSUM_FAILED when MRZ checksums are invalid', () => {
+  it('FAILS with BACK_MRZ_CHECKSUM_FAILED when a wrong check digit is confirmed by the front', () => {
+    // Document number AB1234567 carries check digit 9 (must be 1); the front reads AB1234567 too.
     const back = makeBackResult({
       mrz_result: {
-        raw_lines: ['P<USADOE<<JOHN...', 'AB12345679USA9001150M3012310...'],
+        raw_lines: ['P<USADOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<', 'AB12345679USA9001150M3012310<<<<<<<<<<<<<<00'],
         checksums_valid: false,
       },
     });
@@ -191,7 +192,45 @@ describe('Gate 2 — Back Document Integrity', () => {
 
     const result = evaluateGate2(back, makeFrontResult(), 'DE');
     expect(result.passed).toBe(false);
+    // Unparseable line: nothing confirms tampering, the user is asked for a new photo.
+    expect(result.rejection_reason).toBe('BACK_MRZ_UNREADABLE');
+  });
+
+  // ─── Preuvid : illisible ou clé fausse (lot 1) ───────────────
+  // Banc, cni2021_01 sombre_bruit : « TK2Z2DEVY » lu « TK2ZZDEVY » au verso.
+  const CNI_LUE_DE_TRAVERS = ['IDFRATK2ZZDEVY5<<<<<<<<<<<<<<<', '7704020F3403277FRA<<<<<<<<<<<0', 'LEFEBVRE<<LUCAS<<<<<<<<<<<<<<<'];
+  const versoCni = (lines: string[]) => makeBackResult({
+    qr_payload: null, barcode_format: 'MRZ_TD1', raw_barcode_data: null,
+    mrz_result: { raw_lines: lines, checksums_valid: false },
+  });
+  const rectoCni = (num: string) => ({
+    ...makeFrontResult(),
+    ocr: { full_name: 'LUCAS LEFEBVRE', date_of_birth: '1977-04-02', id_number: num, expiry_date: '2034-03-27' },
+  });
+
+  it('asks for a new photo when the front disagrees with the misread MRZ value', () => {
+    const result = evaluateGate2(versoCni(CNI_LUE_DE_TRAVERS), rectoCni('TK2Z2DEVY'), 'FR');
+    expect(result.passed).toBe(false);
+    expect(result.rejection_reason).toBe('BACK_MRZ_UNREADABLE');
+    expect(result.user_message).toMatch(/retake/i);
+  });
+
+  it('flags tampering when the front shows the very value whose check digit is wrong', () => {
+    const result = evaluateGate2(versoCni(CNI_LUE_DE_TRAVERS), rectoCni('TK2ZZDEVY'), 'FR');
     expect(result.rejection_reason).toBe('BACK_MRZ_CHECKSUM_FAILED');
+    expect(result.rejection_detail).toContain('documentNumber');
+  });
+
+  it('does not count fields whose own check digit is right (only the composite fails)', () => {
+    // Date of birth and expiry have valid keys: their agreement with the front proves nothing.
+    const result = evaluateGate2(versoCni(CNI_LUE_DE_TRAVERS), rectoCni(''), 'FR');
+    expect(result.rejection_reason).toBe('BACK_MRZ_UNREADABLE');
+  });
+
+  it('does not treat front values as independent when the front has its own MRZ', () => {
+    const front = { ...rectoCni('TK2ZZDEVY'), mrz_from_front: CNI_LUE_DE_TRAVERS };
+    const result = evaluateGate2(versoCni(CNI_LUE_DE_TRAVERS), front, 'FR');
+    expect(result.rejection_reason).toBe('BACK_MRZ_UNREADABLE');
   });
 
   it('treats null issuingCountry as US (backward compatibility)', () => {

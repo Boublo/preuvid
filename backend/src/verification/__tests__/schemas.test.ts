@@ -296,8 +296,8 @@ describe('VerificationStatus enum', () => {
 });
 
 describe('RejectionReason enum', () => {
-  it('has exactly 16 reasons (12 original + 2 security + 2 voice)', () => {
-    expect(Object.keys(RejectionReason).length).toBe(16);
+  it('has exactly 17 reasons (12 original + 2 security + 2 voice + 1 Preuvid)', () => {
+    expect(Object.keys(RejectionReason).length).toBe(17);
   });
 
   it('includes all spec-defined reasons', () => {
@@ -305,6 +305,7 @@ describe('RejectionReason enum', () => {
     expect(RejectionReason.FRONT_LOW_CONFIDENCE).toBe('FRONT_LOW_CONFIDENCE');
     expect(RejectionReason.BACK_BARCODE_NOT_FOUND).toBe('BACK_BARCODE_NOT_FOUND');
     expect(RejectionReason.BACK_MRZ_CHECKSUM_FAILED).toBe('BACK_MRZ_CHECKSUM_FAILED');
+    expect(RejectionReason.BACK_MRZ_UNREADABLE).toBe('BACK_MRZ_UNREADABLE');
     expect(RejectionReason.BACK_MRZ_BARCODE_MISMATCH).toBe('BACK_MRZ_BARCODE_MISMATCH');
     expect(RejectionReason.CROSS_VALIDATION_FAILED).toBe('CROSS_VALIDATION_FAILED');
     expect(RejectionReason.DOCUMENT_EXPIRED).toBe('DOCUMENT_EXPIRED');
