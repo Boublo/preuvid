@@ -9,6 +9,24 @@ const PLACEHOLDER_SECRETS = [
   'change-this-service-token',
 ];
 
+// Preuvid (lot 0) : la liste exacte ci-dessus laissait passer les variantes
+// longues des modèles de configuration (par exemple
+// « your-super-secret-jwt-key-change-this-in-production », 51 caractères,
+// présent dans l'ancien .env.example). On refuse aussi toute valeur qui
+// contient un fragment de texte d'exemple, ou qui varie trop peu.
+const PLACEHOLDER_FRAGMENTS = [
+  'your-', 'your_', 'change-this', 'change_this', 'changeme', 'change-me',
+  'replace-me', 'replace_me', 'placeholder', 'example', 'remplacer', 'a-generer',
+];
+
+export function isPlaceholderSecret(value: string): boolean {
+  if (PLACEHOLDER_SECRETS.includes(value)) return true;
+  const lower = value.toLowerCase();
+  if (PLACEHOLDER_FRAGMENTS.some((f) => lower.includes(f))) return true;
+  // « aaaaaaaa… », « 0000… » : longueur suffisante mais aucune entropie.
+  return value.length >= 32 && new Set(value).size < 8;
+}
+
 interface Secrets {
   jwtSecret: string;
   apiKeySecret: string;
@@ -17,7 +35,7 @@ interface Secrets {
 }
 
 export function validateSecrets(secrets: Secrets): void {
-  if (PLACEHOLDER_SECRETS.includes(secrets.jwtSecret)) {
+  if (isPlaceholderSecret(secrets.jwtSecret)) {
     throw new Error(
       'JWT_SECRET must be changed from the default value. ' +
       'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(64).toString(\'hex\'))"'
@@ -28,7 +46,7 @@ export function validateSecrets(secrets: Secrets): void {
     throw new Error('JWT_SECRET must be at least 32 characters long.');
   }
 
-  if (PLACEHOLDER_SECRETS.includes(secrets.apiKeySecret)) {
+  if (isPlaceholderSecret(secrets.apiKeySecret)) {
     throw new Error(
       'API_KEY_SECRET must be changed from the default value. ' +
       'WARNING: Changing this invalidates all existing API keys.'
@@ -49,7 +67,7 @@ export function validateSecrets(secrets: Secrets): void {
   // STORAGE_ENCRYPTION=true — files would otherwise be encrypted under a
   // public-string key, re-creating the audit finding the feature was
   // supposed to fix.
-  if (PLACEHOLDER_SECRETS.includes(secrets.encryptionKey)) {
+  if (isPlaceholderSecret(secrets.encryptionKey)) {
     throw new Error(
       'ENCRYPTION_KEY must be changed from the default value. ' +
       'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
@@ -60,7 +78,7 @@ export function validateSecrets(secrets: Secrets): void {
     throw new Error('API_KEY_SECRET must be at least 32 characters long.');
   }
 
-  if (PLACEHOLDER_SECRETS.includes(secrets.serviceToken)) {
+  if (isPlaceholderSecret(secrets.serviceToken)) {
     throw new Error('SERVICE_TOKEN must be changed from the default value.');
   }
 

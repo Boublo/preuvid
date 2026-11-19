@@ -10,6 +10,7 @@ import {
   classifyDocument, applyUkDlCrossCheck, isLikelyUkDl,
 } from '@idswyft/shared';
 import { logger } from '@/utils/logger.js';
+import { modelFile } from '@/models/registry.js';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -299,15 +300,21 @@ export class PaddleOCRProvider implements OCRProvider {
       this.initPromise = (async () => {
         logger.info('PaddleOCRProvider: initializing ONNX models…');
         try {
-          const svc = new PaddleOcrService({ debugging: { verbose: false } });
+          // Modèles figés dans l'image (models.manifest.json) : aucun
+          // téléchargement à l'exécution.
+          const svc = new PaddleOcrService({
+            model: {
+              detection:            modelFile('paddle/PP-OCRv5_mobile_det_infer.onnx'),
+              recognition:          modelFile('paddle/en_PP-OCRv5_mobile_rec_infer.onnx'),
+              charactersDictionary: modelFile('paddle/ppocrv5_en_dict.txt'),
+            },
+            debugging: { verbose: false },
+          });
           await svc.initialize();
           this.service = svc;
           logger.info('PaddleOCRProvider: ready');
         } catch (error) {
-          // Don't cache a failed init. The ONNX models are downloaded on the
-          // first request, so a transient network blip here would otherwise
-          // disable OCR for the life of the container (community #57). Clear
-          // the promise so the next call retries the download.
+          // Échec non mis en cache : l'appel suivant réessaie le chargement.
           this.initPromise = null;
           logger.error('PaddleOCRProvider: failed to initialize ONNX models', {
             error: error instanceof Error ? error.message : String(error),

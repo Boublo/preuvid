@@ -18,6 +18,7 @@ import express from 'express';
 import { logger } from '@/utils/logger.js';
 import { configureSharedLogger } from '@idswyft/shared';
 import extractRouter from '@/routes/extract.js';
+import { getModelStatus, ModelsUnavailableError, modelsUnavailableBody } from '@/models/registry.js';
 
 const app = express();
 
@@ -28,9 +29,41 @@ const PORT = parseInt(process.env.PORT || '3002');
 // JSON body parsing (for metadata fields)
 app.use(express.json({ limit: '1mb' }));
 
-// Health check
+// Vérification des modèles figés, une fois au démarrage. Un écart ne fait pas
+// tomber le processus : les routes concernées répondront 503.
+const modelStatus = getModelStatus();
+if (modelStatus.problemes.length > 0) {
+  logger.error('Modèles en écart avec le manifeste', { problemes: modelStatus.problemes });
+} else {
+  logger.info(`Modèles vérifiés : ${modelStatus.modeles} fichiers conformes au manifeste`);
+}
+
+function modelsSummary() {
+  const status = getModelStatus();
+  return {
+    usages: status.usages,
+    problemes: status.problemes,
+    verifieLe: status.verifieLe,
+  };
+}
+
+// Vivacité du processus : toujours 200, avec l'état des modèles.
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'idswyft-engine', uptime: process.uptime() });
+  const models = modelsSummary();
+  const degraded = models.problemes.length > 0;
+  res.json({
+    status: degraded ? 'degraded' : 'ok',
+    service: 'idswyft-engine',
+    uptime: process.uptime(),
+    models,
+  });
+});
+
+// Disponibilité : 503 tant que la lecture des pièces ou le visage est inutilisable.
+app.get('/ready', (_req, res) => {
+  const models = modelsSummary();
+  const ready = models.usages.ocr === 'ok' && models.usages.visage === 'ok';
+  res.status(ready ? 200 : 503).json({ ready, models });
 });
 
 // Extraction routes
@@ -41,6 +74,10 @@ Sentry.setupExpressErrorHandler(app);
 
 // Global error handler
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  if (err instanceof ModelsUnavailableError) {
+    res.status(503).json(modelsUnavailableBody(err));
+    return;
+  }
   logger.error('Unhandled engine error', {
     error: err.message,
     stack: err.stack,

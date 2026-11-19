@@ -1,0 +1,160 @@
+{
+  "_lisezmoi": "Modèles figés dans l'image du moteur (lot 0). Chaque fichier est vérifié par son empreinte SHA-256 à la construction (download-models.js) et au démarrage (src/models/registry.ts). Pour changer de modèle : modifier l'URL et l'empreinte ici, reconstruire, relancer le banc.",
+  "schema": 1,
+  "models": [
+    {
+      "id": "paddle-detection",
+      "usage": "ocr",
+      "path": "paddle/PP-OCRv5_mobile_det_infer.onnx",
+      "sha256": "d7fe3ea74652890722c0f4d02458b7261d9f5ae6c92904d05707c9eb155c7924",
+      "size": 4748769,
+      "source": { "url": "https://media.githubusercontent.com/media/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models/47db434bfc5797a04019edf26eba99a3543ada79/detection/PP-OCRv5_mobile_det_infer.onnx" }
+    },
+    {
+      "id": "paddle-reconnaissance",
+      "usage": "ocr",
+      "path": "paddle/en_PP-OCRv5_mobile_rec_infer.onnx",
+      "sha256": "1081b104a3c44d103511f150763d997a846994431c5775a800c802254c1124bf",
+      "size": 7855803,
+      "source": { "url": "https://media.githubusercontent.com/media/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models/47db434bfc5797a04019edf26eba99a3543ada79/recognition/multi/en/v5/en_PP-OCRv5_mobile_rec_infer.onnx" }
+    },
+    {
+      "id": "paddle-dictionnaire",
+      "usage": "ocr",
+      "path": "paddle/ppocrv5_en_dict.txt",
+      "sha256": "c60d46e9e01d500ed6388fe8681051eac9cf6692e0d57238315be171927a0a1b",
+      "size": 1417,
+      "source": { "url": "https://raw.githubusercontent.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models/47db434bfc5797a04019edf26eba99a3543ada79/recognition/multi/en/v5/ppocrv5_en_dict.txt" }
+    },
+    {
+      "id": "tesseract-eng",
+      "usage": "ocr",
+      "path": "tesseract/eng.traineddata",
+      "sha256": "5dc5d8d640a212c9d6184921ba103b186f50e0fed9ee716c53e6b312b400d747",
+      "size": 5199098,
+      "source": {
+        "url": "https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int/eng.traineddata.gz",
+        "sha256": "45b4cb346724ac1774f1c36f42f182b887bcdb28ebe63e6fff90ac41f3fcff91",
+        "gunzip": true
+      }
+    },
+    {
+      "id": "visage-detection-manifeste",
+      "usage": "visage",
+      "path": "ssd_mobilenetv1_model-weights_manifest.json",
+      "sha256": "888f744dffbc84f5f060d1f8427d9742341943a2dfaaf9205d10029b7e7a2955",
+      "size": 28233,
+      "source": { "npm": "@vladmandic/face-api/model/ssd_mobilenetv1_model-weights_manifest.json" }
+    },
+    {
+      "id": "visage-detection",
+      "usage": "visage",
+      "path": "ssd_mobilenetv1_model.bin",
+      "sha256": "2835640602d53718aa6ae9a42896327eaa21beefed056c218d32ca7d79e1e2f8",
+      "size": 5616957,
+      "source": { "npm": "@vladmandic/face-api/model/ssd_mobilenetv1_model.bin" }
+    },
+    {
+      "id": "visage-points-manifeste",
+      "usage": "visage",
+      "path": "face_landmark_68_model-weights_manifest.json",
+      "sha256": "ca4886639f86e99b39fed0c155f81b63317225773bd9616716e887b0153389c9",
+      "size": 8485,
+      "source": { "npm": "@vladmandic/face-api/model/face_landmark_68_model-weights_manifest.json" }
+    },
+    {
+      "id": "visage-points",
+      "usage": "visage",
+      "path": "face_landmark_68_model.bin",
+      "sha256": "4611ef65c87d836d03d684b30eec4d195d8b219fa1dd58fc58945831c6b9299b",
+      "size": 356840,
+      "source": { "npm": "@vladmandic/face-api/model/face_landmark_68_model.bin" }
+    },
+    {
+      "id": "visage-empreinte-manifeste",
+      "usage": "visage",
+      "path": "face_recognition_model-weights_manifest.json",
+      "sha256": "cbaffa501b0b9275a12b63357a6843e7e30c054e1c9151e1a5f879b26e32986b",
+      "size": 19615,
+      "source": { "npm": "@vladmandic/face-api/model/face_recognition_model-weights_manifest.json" }
+    },
+    {
+      "id": "visage-empreinte",
+      "usage": "visage",
+      "path": "face_recognition_model.bin",
+      "sha256": "b413e420d6840b2775fba32008db6f3cddb07d485967fb42cfcf379c16a8c589",
+      "size": 6444032,
+      "source": { "npm": "@vladmandic/face-api/model/face_recognition_model.bin" }
+    },
+    {
+      "id": "visage-expression-manifeste",
+      "usage": "visage",
+      "path": "face_expression_model-weights_manifest.json",
+      "sha256": "5b349c17c7836da506e03422cd6461c74085d8bb2713ad4114647dc5d28174c8",
+      "size": 6980,
+      "source": { "npm": "@vladmandic/face-api/model/face_expression_model-weights_manifest.json" }
+    },
+    {
+      "id": "visage-expression",
+      "usage": "visage",
+      "path": "face_expression_model.bin",
+      "sha256": "9a9840f2cf1f4c7eab95f197512569345c00d2426754d4608b92af30e0300f3d",
+      "size": 329468,
+      "source": { "npm": "@vladmandic/face-api/model/face_expression_model.bin" }
+    },
+    {
+      "id": "visage-age-genre-manifeste",
+      "usage": "visage",
+      "path": "age_gender_model-weights_manifest.json",
+      "sha256": "74b60bf3ebf981bf4e661e9cca3a185614e10b25d797118b62e2a68d3ff2569f",
+      "size": 8392,
+      "source": { "npm": "@vladmandic/face-api/model/age_gender_model-weights_manifest.json" }
+    },
+    {
+      "id": "visage-age-genre",
+      "usage": "visage",
+      "path": "age_gender_model.bin",
+      "sha256": "49f92bbc0afef2342c4385e4a2b0acb6d7a727c6f0aa539499719a81acf9abaa",
+      "size": 429708,
+      "source": { "npm": "@vladmandic/face-api/model/age_gender_model.bin" }
+    },
+    {
+      "id": "voix-locuteur",
+      "usage": "voix",
+      "path": "voice/wespeaker_en_voxceleb_CAM++_LM.onnx",
+      "sha256": "e197af7e9d473030cf486b3124149a19bf37014d0e4485e4c70c483b0ec10cb2",
+      "size": 29292687,
+      "source": { "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_CAM++_LM.onnx" }
+    },
+    {
+      "id": "voix-transcription",
+      "usage": "voix",
+      "path": "voice/sherpa-onnx-nemo-ctc-en-conformer-small/model.int8.onnx",
+      "sha256": "66cfde4ce0b6da9e1a4352e58f0c968f87da23070cf229c81ae0d520cddad2a2",
+      "size": 46419854,
+      "source": {
+        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-ctc-en-conformer-small.tar.bz2",
+        "sha256": "83dcb462aece5bef4e8072c267419389f0b8d1f91152d8851765f284ff664caa",
+        "tarMember": "sherpa-onnx-nemo-ctc-en-conformer-small/model.int8.onnx"
+      }
+    },
+    {
+      "id": "voix-transcription-jetons",
+      "usage": "voix",
+      "path": "voice/sherpa-onnx-nemo-ctc-en-conformer-small/tokens.txt",
+      "sha256": "1adce7866285e6a4aac6208b120d5b8e4302b7cae5f2ae541c343097773fd988",
+      "size": 11611,
+      "source": {
+        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-ctc-en-conformer-small.tar.bz2",
+        "sha256": "83dcb462aece5bef4e8072c267419389f0b8d1f91152d8851765f284ff664caa",
+        "tarMember": "sherpa-onnx-nemo-ctc-en-conformer-small/tokens.txt"
+      }
+    }
+  ],
+  "absents": [
+    {
+      "id": "deepfake-detector",
+      "raison": "Le fichier publié par Idswyft (releases models-v1.0.0) renvoie 404 ; le détecteur se désactive seul (OnnxDeepfakeDetector). À traiter dans un lot ultérieur."
+    }
+  ]
+}

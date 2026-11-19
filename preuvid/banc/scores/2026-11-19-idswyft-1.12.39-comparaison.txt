@@ -1,0 +1,17 @@
+appels comparés : 256  (absents d'un côté : 0)
+lignes MRZ brutes identiques : 245/256
+
+== Score TOUT par document (référence -> mesure) ==
+cni2021/back           n= 64     0% ->     0%  écart +0 pt
+cni2021/front          n= 64    69% ->    64%  écart -5 pt
+cni_old/front          n= 64     3% ->     6%  écart +3 pt
+passport/front         n= 64     8% ->     8%  écart +0 pt
+
+== Verdicts changés : 7 ==
+  perdu : img/cni2021_00_basse_resolution.jpg|front
+  gagné : img/cni2021_01_sombre_bruit.jpg|front
+  perdu : img/cni2021_04_sombre_bruit.jpg|front
+  perdu : img/cni2021_05_sombre_bruit.jpg|front
+  perdu : img/cni2021_07_sombre_bruit.jpg|front
+  gagné : img/cni_old_00_flou.jpg|front
+  gagné : img/cni_old_01_flou.jpg|front

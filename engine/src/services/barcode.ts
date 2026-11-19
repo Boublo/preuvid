@@ -6,6 +6,7 @@
  */
 
 import { logger } from '@/utils/logger.js';
+import { tesseractWorkerOptions } from '@/providers/ocr/tesseractOptions.js';
 import { VERIFICATION_THRESHOLDS } from '@/config/verificationThresholds.js';
 import {
   VerificationFailureType,
@@ -351,19 +352,19 @@ export class BarcodeService {
 
       const processedBuffer = await this.preprocessImageForBackOfId(imageBuffer);
 
-      const worker = await Tesseract.createWorker('eng', 1, {
-        logger: () => {},
-      });
-
-      await worker.setParameters({
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/- :()[]',
-        tessedit_pageseg_mode: Tesseract.PSM.AUTO,
-        preserve_interword_spaces: '1',
-        tessedit_ocr_engine_mode: Tesseract.OEM.DEFAULT,
-      });
-
-      const { data } = await worker.recognize(processedBuffer);
-      await worker.terminate();
+      const worker = await Tesseract.createWorker('eng', 1, tesseractWorkerOptions());
+      let data: { text: string };
+      try {
+        await worker.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,/- :()[]',
+          tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+          preserve_interword_spaces: '1',
+          tessedit_ocr_engine_mode: Tesseract.OEM.DEFAULT,
+        });
+        ({ data } = await worker.recognize(processedBuffer));
+      } finally {
+        await worker.terminate();
+      }
 
       const structuredData = this.extractBackOfIdStructuredData(data.text);
       structuredData.raw_text = data.text;

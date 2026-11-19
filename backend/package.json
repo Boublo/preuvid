@@ -8,7 +8,7 @@
     "dev": "tsx watch --clear-screen=false src/server.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "eslint src --ext .ts,.js",
     "type-check": "tsc --noEmit",
     "migrate": "tsx src/scripts/migrate.ts",

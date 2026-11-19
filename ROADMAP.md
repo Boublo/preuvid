@@ -24,7 +24,7 @@ Défauts identifiés dans le moteur :
 - aucun redressement : 7° de rotation ou de perspective donne 0 % ;
 - les prénoms sont perdus ;
 - aucune correction par les clés de contrôle (confusions O/0, I/1…) ;
-- le moteur plante si le téléchargement d'un modèle échoue au démarrage ;
+- le moteur plante si le téléchargement d'un modèle échoue au démarrage (corrigé au lot 0) ;
 - le modèle de détection de deepfake est absent de l'image publique.
 La bibliothèque `mrz` décode correctement les trois formats français quand on lui donne les bonnes lignes.
 
@@ -32,19 +32,149 @@ La bibliothèque `mrz` décode correctement les trois formats français quand on
 
 But : un dépôt qui se construit, se teste et se mesure sans surprise.
 
-- [ ] La pile démarre en local avec Docker Compose, les tests existants passent (noter ceux qui échouent d'origine).
-- [ ] Retirer `watchtower` du compose (mise à jour automatique d'images en production : refusé).
-- [ ] Figer tous les modèles dans l'image du moteur (Tesseract `eng.traineddata`, modèles PaddleOCR,
+- [x] La pile démarre en local avec Docker Compose, les tests existants passent (noter ceux qui échouent d'origine).
+- [x] Retirer `watchtower` du compose (mise à jour automatique d'images en production : refusé).
+- [x] Figer tous les modèles dans l'image du moteur (Tesseract `eng.traineddata`, modèles PaddleOCR,
       face-api) : aucun appel réseau au démarrage ni à la première requête. Somme de contrôle vérifiée au build.
-- [ ] Le moteur ne plante plus sur une erreur de chargement : il répond une erreur claire.
-- [ ] Intégration continue GitHub Actions : lint, tests, construction des images. Écrire nos propres
+- [x] Le moteur ne plante plus sur une erreur de chargement : il répond une erreur claire.
+- [x] Intégration continue GitHub Actions : lint, tests, construction des images. Écrire nos propres
       workflows (ceux d'Idswyft sont archivés dans `docs/amont/`).
 - [ ] Banc lancé par une seule commande, scores écrits dans `preuvid/banc/scores/` ; retrouver les
-      chiffres de référence ci-dessus à ±2 points.
-- [ ] `.env.example` relu : aucun secret par défaut utilisable en production.
+      chiffres de référence ci-dessus à ±2 points. *Une commande et reproductibilité : faits. ±2 points :
+      non atteint (CNI 2021 −5, ancienne CNI +3), la référence du 18/11 n'est pas reproductible, voir
+      le bilan.*
+- [x] `.env.example` relu : aucun secret par défaut utilisable en production.
 
 Fin du lot : `docker compose up` sur une machine vierge sans accès Internet après le build, tests verts,
 banc reproductible.
+
+### Bilan du lot 0 (19 novembre 2026)
+
+**Tests d'origine.** Aucun test ne passait tels quels :
+- `npm ci` refusait de s'exécuter, car `package-lock.json` et `frontend/package-lock.json` étaient
+  désynchronisés de leurs `package.json` ;
+- les images étaient construites par `npm install`, donc avec des versions différentes à chaque build ;
+- `@idswyft/shared` ne compilait plus avec sharp 0.35 (dépendance pair restée en 0.34, types déplacés),
+  ce qui cassait la résolution de `sharp` et des alias `@/` dans les tests du backend.
+
+Après correction, sous Node 20 Linux, comme en CI :
+
+| Paquet | Résultat |
+|---|---|
+| backend | 1286 réussis, 10 ignorés d'origine |
+| moteur | 8 réussis (nouveaux : registre des modèles, réponse 503) |
+| frontend | 48 réussis (aucun script `test` d'origine) |
+
+Les quatre paquets passent `tsc --noEmit`. Il n'y a aucune configuration ESLint dans le dépôt : en CI, le
+lint se limite pour l'instant à la vérification de types.
+
+**Ce qui a changé.**
+- `docker-compose.yml` :
+  - watchtower est retiré ;
+  - les images sont construites depuis le dépôt (`pull_policy: never`), jamais tirées de ghcr.io ;
+  - les secrets sont obligatoires (`${VAR:?}`) ;
+  - le moteur et la base sont sur un réseau interne sans sortie Internet ;
+  - le contrôle de santé du moteur passe par `/ready`.
+  - `docker-compose.build.yml` est fusionné dans `docker-compose.yml`.
+  - `install.sh`, `update.sh` et `uninstall.sh` (tirage des images Idswyft, mise à jour automatique)
+    sont archivés dans `docs/amont/scripts/`.
+- Modèles :
+  - `engine/models.manifest.json` liste les 17 fichiers, leurs sources (épinglées sur un commit ou une
+    version) et leurs SHA-256 ;
+  - `download-models.js` les récupère et les vérifie à la construction, puis une seconde fois dans
+    l'image finale ;
+  - PaddleOCR et Tesseract lisent des fichiers locaux (`langPath`, `cacheMethod: 'none'`) ;
+  - l'image du moteur passe de 5,3 Go à 2,9 Go : le `chown -R /app` d'origine recopiait 1,5 Go dans une
+    couche à part.
+- Erreurs :
+  - le moteur vérifie ses modèles au démarrage ;
+  - `/health` donne leur état, `/ready` répond 503 si la lecture ou le visage est inutilisable ;
+  - les routes concernées répondent 503 `MODELS_UNAVAILABLE` avec la liste des fichiers en cause ;
+  - Tesseract reçoit un `errorHandler` : avant, une erreur du worker tuait tout le processus (code 7).
+- Images :
+  - les trois images sont installées par `npm ci` depuis les lockfiles ;
+  - les dépendances de production sont réinstallées par `npm ci --omit=dev`, et l'image finale copie
+    aussi les `node_modules` propres à chaque paquet (`engine/`, `backend/`, `shared/`) : npm y range les
+    versions qui diffèrent de la racine, par exemple `dotenv` 17.4 pour le moteur et l'API ;
+  - les fichiers du moteur appartiennent à root, et le processus tourne sous `nodeuser`, en lecture seule.
+- Secrets :
+  - `.env.example` et `.env.community` n'ont plus aucune valeur utilisable ;
+  - `validateSecrets` refuse désormais les variantes longues des valeurs d'exemple (l'ancienne
+    `your-super-secret-jwt-key-change-this-in-production` passait) et les chaînes sans entropie.
+- CI :
+  - `.github/workflows/ci.yml` (types, tests, construction des trois images, démarrage du moteur
+    `--network none`) ;
+  - `banc.yml`, à lancer à la main ;
+  - les actions sont épinglées par SHA.
+
+**Banc.** `python3 preuvid/banc/banc.py`, entièrement dans Docker, moteur sur un réseau sans Internet.
+Score « TOUT » (tous les champs justes) :
+
+| Pièce | Référence du 18/11 | Moteur d'origine, banc conteneurisé | Moteur du lot 0, hors ligne |
+|---|---|---|---|
+| CNI 2021, verso | 0 % | 0 % | 0 % |
+| CNI 2021, via `/front` | 69 % | 64 % | 64 % |
+| Ancienne CNI | 3 % | 6 % | 6 % |
+| Passeport | 8 % | 8 % | 8 % |
+
+- Le moteur du lot 0 donne les mêmes 256 réponses que le moteur d'origine passé le même jour dans le même
+  banc (256/256 lignes MRZ identiques, aucun verdict changé). Les confiances ne diffèrent qu'à la sixième
+  décimale (`onnxruntime` 1.26.0 du lockfile contre 1.31.1 dans l'image d'origine). Le lot 0 ne change
+  donc pas la lecture.
+- Le banc est déterministe sur cette machine : deux passages du moteur d'origine donnent les mêmes
+  256 réponses, confiances comprises au chiffre près, et le moteur ne change pas de résultat avec 2 ou
+  16 cœurs visibles. Reste à vérifier sur un autre processeur (premier passage de `banc.yml` en CI).
+- L'écart de ±2 points avec la référence du 18/11 n'est **pas atteint** (CNI 2021 −5, ancienne CNI +3 ;
+  11 lignes sur 256 diffèrent, et 172 confiances sur 181 même là où les lignes sont identiques). Cette
+  référence n'est pas reproductible :
+  - le moteur d'origine mesuré aujourd'hui a été construit sur cette machine le 19/11 à 01 h 08 UTC, depuis
+    les sources 1.12.39, après la référence (18/11, 22 h 27 UTC) ; celui du 18/11 a été construit ailleurs,
+    à un autre moment, et n'existe plus (ce n'est pas non plus l'image publiée par Idswyft, dont
+    l'empreinte diffère) ;
+  - le Dockerfile d'origine installe par `npm install` sans lockfile et télécharge des modèles non épinglés,
+    donc chaque construction peut changer les versions (`onnxruntime` 1.31.1 aujourd'hui, une version
+    qu'aucun lockfile ne mentionne) ;
+  - le banc d'origine installait Pillow, OpenCV et NumPy sans version.
+  C'est le défaut que le lot 0 corrige ; la décision de changer de référence revient à David (point 6
+  ci-dessous).
+- Fichiers : `preuvid/banc/scores/2026-11-19-idswyft-1.12.39*` (moteur d'origine) et
+  `2026-11-19-lot-0*` (moteur du lot 0).
+
+**Écarts et points ouverts.**
+- Détecteur de deepfake : absent. Le fichier publié par Idswyft renvoie 404, et le détecteur se désactive seul
+  (inscrit dans `absents` du manifeste).
+- Lint : aucune configuration ESLint d'origine (backend en ESLint 10, frontend en ESLint 8). Seuls les
+  types sont vérifiés. Une configuration minimale reste à écrire, sans corriger le code en masse.
+- `docker-compose.dev.yml` désigne des services qui n'existent plus (`vaas-backend`, `nginx`). Il n'a pas été
+  touché.
+- L'API garde des appels sortants qui échouent proprement sans Internet : liste Tor au démarrage, liste
+  OFAC, OAuth GitHub, fournisseurs SMS et e-mail. Vérifié une fois : pile complète avec les deux réseaux
+  coupés d'Internet, base neuve, les quatre services sains, l'API joint le moteur et la liste Tor échoue
+  sans bloquer.
+- Sur une machine vierge, `docker compose pull --ignore-buildable` doit tourner avant de couper le réseau :
+  l'image `postgres:16-alpine` (et `caddy` pour HTTPS) vient de Docker Hub, `build` ne la tire pas.
+- `geoip-lite` 2.0.2 demande Node 24, alors que les images sont en Node 20 (simple avertissement, tests verts).
+
+**À trancher par David (non traité, hors lot 0).**
+1. Cache de PaddleOCR (`ppu-paddle-ocr` 4.1.1) :
+   - il garde en mémoire les 10 derniers résultats, indexés sur les 1024 premiers octets de l'image et sa
+     taille ;
+   - deux images qui partagent ces octets reçoivent le même résultat, et des données personnelles restent
+     en mémoire ;
+   - correctif d'une ligne : `recognize(…, { noCache: true })`, à passer au banc.
+2. CORS : `backend/src/config/index.ts` autorise toujours `idswyft.app`, `www.idswyft.app` et
+   `staging.idswyft.app`, quel que soit `CORS_ORIGINS`.
+3. Chiffrement des pièces stockées : `STORAGE_ENCRYPTION` est désactivé par défaut. Il n'est pas passé
+   par le compose, donc les photos de pièces sont en clair dans le volume `uploads`.
+4. Journaux de l'API en production : ils sont écrits dans `logs/` à l'intérieur du conteneur, sans volume
+   ni rotation au-delà de 5 × 5 Mo, et leur contenu n'a pas été relu.
+5. La CSP du frontend autorise des scripts venus de `docs.opencv.org` (chargement externe côté client).
+6. Nouvelle référence du banc. La référence du 18/11 n'est pas reproductible (voir « Banc »). Proposition :
+   prendre comme ligne de base le passage du moteur du lot 0 (`scores/2026-11-19-lot-0.txt` :
+   0 / 64 / 6 / 8 %), qui se reconstruit à l'identique depuis le commit (lockfile et modèles épinglés), et
+   mettre à jour le tableau du point de départ. Il donne les mêmes 256 réponses que le moteur d'origine
+   construit aujourd'hui, dont l'image (`preuvid-engine:idswyft-1.12.39`) n'existe que sur cette machine
+   et est conservée. Les fichiers `*-reference-*` et le tableau n'ont pas été modifiés.
 
 ## Lot 1 — Lecture des pièces françaises
 

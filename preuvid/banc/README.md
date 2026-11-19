@@ -11,40 +11,52 @@ Images **synthétiques**, identités **fictives** : aucune donnée de vraie pers
 | `run.py` | Envoie chaque image au moteur (`http://127.0.0.1:3002/extract/front` ou `/back`) et écrit `results.jsonl` |
 | `score.py` | Compare `results.jsonl` à `truth.json` et affiche les scores par document et par condition |
 | `mrz-fr.mjs` | Vérifie que la bibliothèque `mrz` décode les trois formats français (spécimens publics) |
-| `scores-reference-idswyft-1.12.39.txt` | Scores du moteur d'origine, le 18/11/2026 : la ligne de base à battre |
+| `scores-reference-idswyft-1.12.39.txt` | Scores du moteur d'origine, le 18/11/2026 : la ligne de base à battre (non reproductible, voir ci-dessous) |
 | `resultats-reference-idswyft-1.12.39.jsonl` | Résultats bruts correspondants |
+
+La référence du 18/11 a été mesurée avant le lot 0, avec des versions de Pillow, OpenCV et NumPy non figées
+et une image du moteur d'origine qui n'existe plus. Le Dockerfile d'origine installe par `npm install` sans
+lockfile, donc chaque construction peut changer les bibliothèques de lecture. Le moteur d'origine construit
+le 19/11 depuis les mêmes sources donne, dans le banc conteneurisé, 0 / 64 / 6 / 8 % au lieu de
+0 / 69 / 3 / 8 % (`scores/2026-11-19-idswyft-1.12.39.txt`). Le banc conteneurisé, lui, est déterministe sur
+la machine de mesure : deux passages donnent les mêmes 256 réponses, au chiffre près.
 
 Documents : CNI 2021 (MRZ TD1, 3×30, au verso), ancienne CNI (2×36, format français), passeport (TD3, 2×44).
 Conditions : propre, flou, rotation 7°, perspective, basse résolution, JPEG fort, reflet, sombre + bruit.
 
 ## Lancer
 
+Une seule commande, depuis la racine du dépôt (Docker et Python 3 suffisent sur l'hôte) :
+
 ```bash
-pip install pillow numpy opencv-python-headless
-python3 gen.py 8                 # crée img/ et truth.json (graine fixe : résultats reproductibles)
-
-# moteur seul, sans exposer le port ailleurs qu'en local
-docker run -d --name kyc-engine --memory 3g --cpus 2 \
-  -e NODE_ENV=production -e PORT=3002 \
-  -p 127.0.0.1:3002:3002 <image du moteur>
-
-: > results.jsonl
-python3 run.py                   # ~15 min sur 2 cœurs (256 appels)
-python3 score.py
+docker compose build engine        # si l'image du moteur n'est pas à jour
+python3 preuvid/banc/banc.py       # ~15 min sur 2 cœurs (256 appels)
 ```
 
-`run.py` reprend là où il s'est arrêté (il saute les clés déjà présentes dans `results.jsonl`).
-Vider `results.jsonl` avant chaque nouvelle mesure.
+`banc.py` construit l'image du banc (`Dockerfile` : Python, Pillow, OpenCV, NumPy et polices DejaVu
+en versions figées), démarre le moteur sur un réseau Docker **interne, sans accès à Internet**,
+génère les images, appelle le moteur, calcule les scores et écrit dans `scores/` :
 
-## Ce que le moteur d'origine demande au premier appel
+| Fichier | Contenu |
+|---|---|
+| `AAAA-MM-JJ-<nom>.txt` | scores, avec l'identifiant des images Docker mesurées |
+| `AAAA-MM-JJ-<nom>-results.jsonl` | résultats bruts |
+| `AAAA-MM-JJ-<nom>-comparaison.txt` | écart avec `resultats-reference-idswyft-1.12.39.jsonl`, appel par appel |
 
-Il télécharge ses modèles au premier document et **s'arrête** si le téléchargement échoue :
+Options : `--moteur IMAGE` (défaut `preuvid/engine:local`), `--nom LIBELLE`, `--reseau-ouvert`
+(seulement pour le moteur d'origine, qui télécharge ses modèles au premier appel).
+`compare.py A.jsonl B.jsonl` compare deux mesures quelconques.
 
-- Tesseract : `eng.traineddata.gz` depuis `cdn.jsdelivr.net`
-- PaddleOCR : `PP-OCRv5_mobile_det_infer.onnx`, `en_PP-OCRv5_mobile_rec_infer.onnx`, `ppocrv5_en_dict.txt`
-  depuis `github.com/PT-Perkasa-Pilar-Utama/ppu-paddle-ocr-models`, mis en cache dans `~/.cache/ppu-paddle-ocr`
+Lancement manuel, sans Docker pour le banc : `python3 gen.py 8`, puis `ENGINE_URL=http://127.0.0.1:3002 python3 run.py`
+et `python3 score.py`. Les images dépendent alors des polices et des versions de Pillow, OpenCV et NumPy
+installées : les scores ne sont comparables qu'avec les mêmes versions que `Dockerfile`.
 
-Dans notre fork, ces modèles doivent être embarqués dans l'image et vérifiés par empreinte.
+## Modèles du moteur
+
+Depuis le lot 0, le moteur ne télécharge plus rien : PaddleOCR, Tesseract, face-api et les modèles vocaux
+sont construits dans l'image depuis `engine/models.manifest.json` (sources épinglées, SHA-256 vérifiée
+à la construction et au démarrage). Un modèle absent ou altéré donne une réponse 503 `MODELS_UNAVAILABLE`,
+le processus reste debout.
 
 ## Limites connues
 

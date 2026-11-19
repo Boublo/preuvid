@@ -167,3 +167,12 @@ caddy/certs/*.crt
 .agents/
 .aidesigner/
 .env*.local
+
+# Modèles du moteur : construits dans l image Docker depuis engine/models.manifest.json
+engine/models/
+
+# Banc : fichiers régénérés à chaque mesure
+preuvid/banc/img/
+preuvid/banc/truth.json
+preuvid/banc/results.jsonl
+preuvid/banc/scores/*-moteur.log
