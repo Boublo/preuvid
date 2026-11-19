@@ -268,13 +268,18 @@ Pas de cible pour l'extension.
   sur le vrai titre).
 - L'analyse de falsification de `/front` voit l'image avant redressement et avant la rotation de 90°.
   Elle voit maintenant le fichier d'origine (EXIF conservé) et non plus une copie réencodée.
-- **À trancher par David avant la fusion : un verso illisible devient un rejet pour « falsification ».**
-  - Le backend (gate 2) rejette pour falsification toute pièce dont `checksums_valid` est faux.
+- **Verso illisible ou clé fausse (gate 2, tranché par David le 19/11/2026).**
   - Avant ce lot, `/back` répondait `checksums_valid: true` même pour des lignes qu'il n'avait pas lues :
-    la gate 2 ne se déclenchait jamais.
-  - Il dit maintenant la vérité. Un verso que l'OCR n'arrive pas à lire est donc rejeté comme faux
-    (sur le banc : 1 verso de CNI 2021 sur 64, une photo sombre et bruitée).
-  - Proposition : distinguer « illisible, reprendre la photo » de « clé fausse », dans le backend.
+    la gate 2 ne se déclenchait jamais. Il dit maintenant la vérité, et la gate 2 rejetait alors comme
+    falsifié un verso simplement mal lu (sur le banc : 1 verso de CNI 2021 sur 64, photo sombre et
+    bruitée, « TK2Z2DEVY » lu « TK2ZZDEVY »).
+  - Une clé fausse seule ne prouve rien : l'OCR qui se trompe d'un caractère donne le même symptôme.
+    La gate 2 rejette donc pour falsification (`BACK_MRZ_CHECKSUM_FAILED`) seulement si un champ dont
+    la propre clé est fausse (numéro, naissance, expiration) porte la même valeur que le recto, lu
+    séparément. Sinon : `BACK_MRZ_UNREADABLE`, avec une demande de nouvelle photo. Un recto qui a sa
+    propre MRZ ne compte pas comme lecture indépendante.
+  - Les deux cas restent des rejets. Limite : une retouche des seules données couvertes par la clé
+    composite (zone facultative) passe pour « illisible ».
 - Hors lot 1, non modifiés :
   - le repli local du backend lit encore le verso avec Tesseract ;
   - `/extract/ocr` lit la date de naissance au format mois/jour (1952-08-01 au lieu de 1952-01-08).
