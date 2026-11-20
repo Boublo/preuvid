@@ -5,8 +5,9 @@
 La pénibilité vient de la répétition. La personne prouve sa majorité une fois, garde une preuve anonyme dans
 son téléphone, puis confirme en un geste à chaque visite.
 
-1. **Première fois** : puce NFC de la pièce si faisable (à étudier), sinon estimation par le visage,
-   sinon pièce d'identité photographiée.
+1. **Première fois** : pièce d'identité photographiée, puis selfie avec détection du vivant et comparaison
+   à la photo de la pièce (détail et limites : `double-anonymat.md`, « Première vérification »). Puce NFC :
+   impossible depuis un navigateur (`nfc-faisabilite.md`). Estimation par le visage seul : en mode test.
 2. **Création du passe** : preuve « majeur », sans nom ni photo, liée à l'appareil par WebAuthn (clé d'accès).
    Le déverrouillage du téléphone sert de second facteur.
 3. **Visites suivantes** : un bouton, déverrouillage, entrée. Objectif : environ trois secondes (non mesuré).

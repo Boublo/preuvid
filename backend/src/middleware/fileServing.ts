@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import { Request, Response } from 'express';
 import config from '@/config/index.js';
 import { supabase } from '@/config/database.js';
+import { fichierDeSessionV1 } from '@/v1/photos.js';
 
 const UPLOADS_BASE = path.resolve(process.cwd(), 'uploads');
 
@@ -145,6 +146,11 @@ export async function serveLocalFile(req: Request, res: Response): Promise<void>
     const dbFilePath = `uploads/${requestedPath}`;
     const owningDeveloperId = await getOwningDeveloperId(dbFilePath);
     if (!owningDeveloperId || owningDeveloperId !== requesterDeveloperId) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+    // Preuvid : les photos d'une session v1 ne vont jamais au site (v1/photos.ts).
+    if (await fichierDeSessionV1(dbFilePath)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

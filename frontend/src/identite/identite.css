@@ -1,0 +1,59 @@
+/* Parcours identité (maquettes 03 à 07) : complète age.css, même direction « papier fiduciaire ». */
+
+/* Deux segments sous l'en-tête : la pièce, puis le visage. */
+.progression { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: -16px 0 28px; position: relative; z-index: 1; }
+.progression span { height: 3px; background: var(--filet); }
+.progression span.fait { background: var(--encre); }
+.sombre .progression span { background: #3A4A44; }
+.sombre .progression span.fait { background: var(--papier); }
+
+/* Cadre de la pièce : format carte, quatre équerres, vidéo sans miroir (caméra arrière). */
+.cadre-piece { position: relative; z-index: 1; width: 100%; aspect-ratio: 1.586; background: #1B2C26; overflow: hidden; }
+.cadre-piece video { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+.cadre-piece.actif video { opacity: 1; }
+.cadre-piece .coins { position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(var(--papier), var(--papier)) left top / 28px 3px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) left top / 3px 28px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) right top / 28px 3px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) right top / 3px 28px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) left bottom / 28px 3px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) left bottom / 3px 28px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) right bottom / 28px 3px no-repeat,
+    linear-gradient(var(--papier), var(--papier)) right bottom / 3px 28px no-repeat; }
+
+/* Indicateurs sous le cadre : un filet qui passe au vert quand c'est bon. */
+.indicateurs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 18px 0 0; position: relative; z-index: 1; }
+/* Les bords de la pièce posés sur ces pointillés tombent dans les bandes extérieures que mesure qualite.ts. */
+.cadre-piece .guide { position: absolute; inset: 7% 5%; border: 2px dashed rgba(242, 243, 238, .55); border-radius: 6px; pointer-events: none; }
+
+.indicateurs div { border-top: 3px solid #3A4A44; padding-top: 8px; }
+.indicateurs div.ok { border-top-color: #6FCF9F; }
+.indicateurs div.non { border-top-color: #E0A93B; }
+.indicateurs dt { font-weight: 600; font-size: 15px; }
+.indicateurs dd { margin: 0; font-size: 14px; color: #C7CCC4; }
+
+.lien.fichier { position: relative; text-align: center; }
+.lien.fichier .sr { position: absolute; }
+.lien.fichier:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.lien.fichier.occupe { opacity: .55; cursor: wait; }
+
+/* Visage sur fond sombre. */
+.sombre .cadre-visage { width: min(100%, 250px); background: #1B2C26; border-color: var(--papier); }
+.sombre .avancement { width: min(100%, 250px); }
+.sombre .cadre-vide { border-color: #5B6B65; }
+.sombre .avancement { background: #3A4A44; }
+.sombre .avancement span { background: #6FCF9F; }
+
+/* Lecture (05) et résultat (07). */
+.registre.lecture { margin-top: 8px; }
+.legende { margin: 24px 0 0; font-size: 14px; font-weight: 600; color: var(--encre-douce); position: relative; z-index: 1; }
+.registre.recu { margin-top: 8px; }
+.registre dt { white-space: normal; }
+.registre dd.non { color: var(--encre-douce); }
+.tampon-resultat.violet { border-color: var(--tampon); color: var(--tampon); }
+a.bouton { text-decoration: none; }
+a.bouton:hover { color: #FFFFFF; }
+
+.lien-texte { display: inline; padding: 0; background: none; border: 0; font: inherit; color: var(--encre); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.lien-texte:disabled { cursor: wait; opacity: .6; }

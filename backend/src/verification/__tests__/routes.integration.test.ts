@@ -31,6 +31,8 @@ const captured = vi.hoisted(() => ({
 
 // Supabase mock — in-memory store
 const contextStore = new Map<string, any>();
+// Preuvid : vérifications créées par l'API v1 (colonne v1_parcours).
+const sessionsV1 = vi.hoisted(() => new Set<string>());
 const verificationStore = new Map<string, any>();
 
 vi.mock('@/config/database.js', () => ({
@@ -58,6 +60,10 @@ vi.mock('@/config/database.js', () => ({
           eq: vi.fn(() => ({
             single: vi.fn(async () => ({ data: null, error: null })),
             limit: vi.fn(() => ({ data: [], error: null })),
+          })),
+          in: vi.fn(async (_col: string, ids: string[]) => ({
+            data: ids.map((id) => ({ id, v1_parcours: sessionsV1.has(id) ? 'identite' : null })),
+            error: null,
           })),
         })),
         insert: vi.fn(async (row: any) => ({ data: row, error: null })),
@@ -584,6 +590,19 @@ describe('V2 Verification Routes — Integration', () => {
 
       expect(resetsWhenFilesDeleted).toBe(0);
       expect(pendingResets()).toHaveLength(1);
+    });
+
+    it('Preuvid : refuses to restart a v1 session (409), without touching its files', async () => {
+      storeSession(VerificationStatus.HARD_REJECTED);
+      sessionsV1.add(verificationId);
+      try {
+        const res = await request(app).post(`/api/v2/verify/${verificationId}/restart`).send();
+        expect(res.status).toBe(409);
+        expect(retention.deleteVerificationFiles).not.toHaveBeenCalled();
+        expect(pendingResets()).toHaveLength(0);
+      } finally {
+        sessionsV1.delete(verificationId);
+      }
     });
 
     it('does not touch any files when the verification has not failed', async () => {

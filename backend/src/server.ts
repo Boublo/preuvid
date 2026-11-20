@@ -22,6 +22,7 @@ import { createGracefulShutdown } from './utils/gracefulShutdown.js';
 import { configureSharedLogger } from '@idswyft/shared';
 import newVerificationRoutes from './routes/newVerification.js';
 import { routerV1 } from './v1/router.js';
+import { sansProvenance } from './v1/age/router.js';
 import developerRoutes from './routes/developer/index.js';
 import adminRoutes from './routes/admin.js';
 import adminThresholdsRoutes from './routes/admin-thresholds.js';
@@ -99,12 +100,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Preuvid, passe majeur : la provenance (Referer, Origin) n'atteint ni CORS, ni le journal, ni les routes.
+app.use('/v1/age', sansProvenance);
+
 // CORS — explicit allowlist only, no wildcard pattern matching
 app.use(cors(buildCorsOptions(config)));
 
 // Basic middleware
 app.use(compression());
-app.use(morgan('combined'));
+// Preuvid : rien n'est journalisé pour /v1/age (ni adresse, ni heure exacte d'une preuve).
+app.use(morgan('combined', { skip: (req) => (req.originalUrl || req.url || '').startsWith('/v1/age') }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
@@ -403,6 +408,11 @@ const startServer = async () => {
           const limite = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
           Promise.resolve(supabase.from('v1_idempotency').delete().lt('created_at', limite))
             .catch(err => logger.error('v1: purge idempotence', { error: String(err) }));
+        }, 60 * 60 * 1000);
+        // Passe majeur : défis expirés et vérifications anonymes abandonnées.
+        const { purgerAge } = await import('./v1/age/passe.js');
+        setInterval(() => {
+          purgerAge().catch(err => logger.error('passe : purge', { error: String(err) }));
         }, 60 * 60 * 1000);
       }
 

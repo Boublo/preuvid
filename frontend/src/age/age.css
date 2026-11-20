@@ -1,0 +1,123 @@
+/* Page du passe majeur : direction « papier fiduciaire » (preuvid/docs/design.md, maquettes 08 à 10). */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+
+:root {
+  --papier: #F2F3EE;
+  --encre: #0F1F1A;
+  --encre-douce: #45544E;
+  --filet: #C7CCC4;
+  --tampon: #47307E;
+  --ambre: #7A4E00;
+  --vert: #1B6245;
+  --blanc: #FBFBF8;
+  --titre: 'Archivo Variable', Archivo, system-ui, sans-serif;
+  --texte: 'Archivo Variable', Archivo, system-ui, sans-serif;
+  --machine: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--papier); color: var(--encre); }
+body { font-family: var(--texte); font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
+a { color: var(--encre); }
+a:hover { color: var(--tampon); }
+:focus-visible { outline: 3px solid var(--tampon); outline-offset: 3px; }
+/* Le titre reçoit le focus à chaque écran pour les lecteurs d'écran ; il n'est pas cliquable. */
+h1[tabindex="-1"]:focus { outline: none; }
+
+.page { min-height: 100dvh; max-width: 440px; margin: 0 auto; padding: 24px 24px 28px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.page.sombre { background: var(--encre); color: var(--papier); max-width: none; }
+.page.sombre > * { width: 100%; max-width: 392px; margin-left: auto; margin-right: auto; }
+.sombre a { color: var(--papier); }
+
+.entete { display: flex; justify-content: space-between; align-items: baseline; margin: 40px 0 28px; position: relative; z-index: 1; }
+.marque { font-family: var(--titre); font-stretch: 125%; font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
+.marque span { color: var(--tampon); }
+.sombre .marque span { color: #C9B8FF; }
+.indice { font-size: 14px; color: var(--encre-douce); }
+.indice.machine { font-family: var(--machine); font-size: 13px; color: var(--vert); }
+.sombre .indice, .sombre .indice.machine { color: #B9C4BE; }
+
+h1 { font-family: var(--titre); font-stretch: 125%; font-weight: 600; letter-spacing: -0.03em; line-height: 1.04; font-size: clamp(28px, 8.7vw, 34px); text-wrap: balance; margin: 0 0 12px; position: relative; z-index: 1; }
+.sombre h1 { font-size: clamp(32px, 10.2vw, 40px); letter-spacing: -0.035em; line-height: 1.02; text-wrap: wrap; }
+.chapeau { color: var(--encre-douce); margin: 0 0 22px; position: relative; z-index: 1; }
+.sombre .chapeau { color: #DDE1DA; }
+
+.choix { border: 0; margin: 0; padding: 0; display: grid; gap: 10px; }
+.choix legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.option { display: block; position: relative; border: 1.5px solid var(--encre); background: var(--blanc); padding: 14px 16px; min-height: 64px; cursor: pointer; }
+.option input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.option:has(input:checked) { background: var(--encre); color: var(--papier); }
+.option:has(input:checked) small { color: #C7CCC4; }
+.option:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.option:has(input:disabled) { opacity: .6; cursor: not-allowed; }
+.option strong { display: block; font-weight: 600; font-size: 17px; }
+.option small { display: block; color: var(--encre-douce); font-size: 14px; }
+.avertissement { color: var(--ambre); }
+
+.bas { margin-top: auto; padding-top: 28px; position: relative; z-index: 1; }
+.bouton { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 56px; padding: 0 20px; border: 0;
+  background: var(--tampon); color: #FFFFFF; font: 600 17px var(--texte); cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); transition: transform .25s cubic-bezier(.2,.7,.2,1); }
+.bouton:hover { transform: translate(-2px, -2px); }
+.bouton:disabled { opacity: .55; cursor: wait; transform: none; }
+.sombre .bouton { background: var(--papier); color: var(--encre); }
+.lien { display: block; margin: 18px auto 0; min-height: 44px; padding: 10px; background: none; border: 0; font: 500 16px var(--texte); color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.note { font-size: 14px; color: var(--encre-douce); margin: 14px 0 0; }
+.sombre .note { color: #C7CCC4; }
+.message { margin: 14px 0 0; padding: 12px 14px; border-left: 3px solid var(--ambre); background: var(--blanc); color: var(--encre); }
+.sombre .message { background: #1B2C26; color: var(--papier); }
+
+.registre { border-top: 1.5px solid var(--encre); margin-top: 24px; }
+.registre div { display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--filet); }
+.registre dt { font-weight: 600; white-space: nowrap; }
+.registre dd { margin: 0; font-family: var(--machine); font-size: 13px; color: var(--vert); text-align: right; }
+
+.carte { position: relative; margin: 8px 14px 0; aspect-ratio: 1.6; border-radius: 14px; background: var(--encre); color: var(--papier); overflow: hidden; padding: 22px; transform: rotate(-3deg); display: flex; flex-direction: column; justify-content: space-between; }
+.carte .rosace { position: absolute; right: -60px; top: -30px; width: 260px; height: 260px; opacity: .35; }
+.carte .marque { font-size: 17px; position: relative; }
+.carte b { display: block; font-family: var(--titre); font-stretch: 125%; font-weight: 600; font-size: 26px; position: relative; }
+.carte small { font-family: var(--machine); font-size: 11px; letter-spacing: .08em; color: #C7CCC4; position: relative; }
+
+.fond-rosace { position: absolute; right: -70px; top: -40px; width: 250px; height: 250px; opacity: .3; color: var(--encre-douce); pointer-events: none; }
+.rosace-centre { width: 230px; height: 230px; margin: 40px auto 34px; color: #FFFFFF; opacity: .75; display: block; }
+
+/* Bouton « prendre la photo » : un libellé qui enveloppe un champ fichier caché mais focalisable. */
+.bouton.photo { position: relative; }
+.bouton.photo .sr { position: absolute; }
+.bouton.photo:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.bouton.photo.occupe { opacity: .55; cursor: wait; transform: none; }
+.bas > .note:first-child { margin: 0 0 10px; }
+
+.tampon-resultat { display: inline-block; align-self: flex-start; margin: 8px 0 18px; padding: 8px 14px; border: 2.5px solid var(--vert); color: var(--vert); font-family: var(--machine); font-size: 15px; transform: rotate(-8deg); animation: pv-tampon .7s .2s cubic-bezier(.2,.7,.2,1) both; }
+
+@keyframes pv-tourne { to { transform: rotate(360deg); } }
+@keyframes pv-tampon { 0% { opacity: 0; transform: rotate(-8deg) scale(2.2); } 60% { opacity: 1; transform: rotate(-8deg) scale(.94); } 100% { opacity: 1; transform: rotate(-8deg) scale(1); } }
+@keyframes pv-pouls { 50% { opacity: .35; } }
+.rg { transform-box: view-box; transform-origin: 50% 50%; animation: pv-tourne 120s linear infinite; }
+.rg0 { animation-duration: 170s; animation-direction: reverse; }
+.rg1 { animation-duration: 80s; }
+.rg2 { animation-duration: 130s; animation-direction: reverse; }
+.attente .rg { animation-duration: 12s; }
+.pouls { animation: pv-pouls 1.6s ease-in-out infinite; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rg, .pouls, .tampon-resultat { animation: none; }
+  .bouton, .carte { transition: none; transform: none; }
+}
+
+/* QR code vers le téléphone : un cadre net, pas de carte. */
+.qr { margin: 6px auto 0; padding: 14px; background: var(--blanc); border: 1.5px solid var(--encre); width: max-content; position: relative; z-index: 1; }
+.qr svg, .qr-vide { display: block; width: 200px; height: 200px; }
+.note.centre { text-align: center; position: relative; z-index: 1; }
+
+/* Visage : cadre sobre, image en miroir (on se voit comme dans une glace), pas d'ovale décoratif. */
+.cadre-visage { position: relative; z-index: 1; margin: 2px auto 0; width: min(100%, 300px); aspect-ratio: 3 / 4; background: var(--blanc); border: 1.5px solid var(--encre); overflow: hidden; }
+.cadre-visage video { display: block; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); opacity: 0; }
+.cadre-visage.actif video { opacity: 1; }
+.cadre-vide { position: absolute; inset: 22% 24% 26%; border: 1.5px dashed var(--filet); border-radius: 50% 50% 46% 46%; }
+.consigne { min-height: 2.8em; margin: 14px 0 0; text-align: center; font-weight: 600; font-size: 17px; position: relative; z-index: 1; }
+.avancement { width: min(100%, 300px); height: 3px; margin: 6px auto 0; background: var(--filet); position: relative; z-index: 1; }
+.avancement span { display: block; height: 100%; background: var(--vert); transition: width .4s ease; }

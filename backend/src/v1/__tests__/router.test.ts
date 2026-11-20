@@ -11,6 +11,7 @@ vi.mock('@/verification/session/VerificationSession.js', () => ({ VerificationSe
 import { describe, expect, it, vi } from 'vitest';
 import { CreationSchema, retourValide, routerV1 } from '../router.js';
 import { openapiV1 } from '../openapi.js';
+import { routerAge } from '../age/router.js';
 
 describe('CreationSchema', () => {
   it('accepte les deux parcours et refuse les champs inconnus', () => {
@@ -41,6 +42,15 @@ describe('openapi', () => {
 
   it('décrit exactement les routes montées', () => {
     expect(montees.length).toBeGreaterThan(5);
-    expect(decrites).toEqual(montees);
+    expect(decrites.filter(r => !r.includes(' /age/'))).toEqual(montees);
+  });
+
+  it('décrit les routes du passe majeur destinées aux sites, et elles existent', () => {
+    const age = (routerAge as any).stack
+      .filter((l: any) => l.route)
+      .flatMap((l: any) => Object.keys(l.route.methods).map(m => `${m} /age${l.route.path}`));
+    const pourSites = decrites.filter(r => r.includes(' /age/'));
+    expect(pourSites).toEqual(['get /age/cles', 'post /age/releves']);
+    for (const r of pourSites) expect(age).toContain(r);
   });
 });

@@ -378,19 +378,82 @@ possible entre deux personnes. Un test vérifie l'option à chaque appel.
 
 But : les écrans mobiles des maquettes 03 à 10. Détail dans `preuvid/docs/verification-age.md`.
 
-- [ ] Parcours identité en cinq écrans : choix de la pièce, photo avec déclenchement automatique et
-      voyants (netteté, reflets, quatre coins), lecture, visage, résultat.
-- [ ] Parcours âge : première vérification, création du passe, confirmation aux visites suivantes.
-- [ ] Passe majeur : preuve « majeur » liée au téléphone par WebAuthn (clé d'accès), sans nom ni photo ;
+- [x] Parcours identité en cinq écrans : choix de la pièce, photo avec déclenchement automatique et
+      voyants (netteté, reflets, quatre coins), lecture, visage, résultat. Page `/verifier#jeton`
+      (`frontend/src/identite/`). Voyants : netteté, lumière et présence de la pièce (voir les écarts).
+- [x] Parcours âge : première vérification, création du passe, confirmation aux visites suivantes.
+      Pour le passe : page `/age` (`frontend/src/age/`), essai de bout en bout `preuvid/e2e/passe-test.mjs`.
+      Les sessions `age` créées par l'API v1 restent sur la page d'Idswyft, sans visage (voir les écarts).
+- [x] Passe majeur : preuve « majeur » liée au téléphone par WebAuthn (clé d'accès), sans nom ni photo ;
       validité d'une confirmation limitée à la visite, expirée après une heure d'inactivité ;
-      rien de stocké dans un compte du site client.
-- [ ] Double anonymat : le site ne reçoit que « majeur oui/non » ; Preuvid n'enregistre pas quel site est visité.
-- [ ] Étude de faisabilité, avant tout code : lecture de la puce NFC de la CNI 2021 et du passeport depuis
+      rien de stocké dans un compte du site client. Le minuteur d'inactivité et la fin à la fermeture de
+      la page sont fournis par le module du site (`preuvid/sdk/age/navigateur.js`) : aucun test ne les couvre,
+      et le site doit les brancher.
+- [x] Double anonymat : le site ne reçoit que « majeur oui/non » ; Preuvid n'enregistre pas quel site est visité.
+      Signature aveugle, voir `preuvid/docs/double-anonymat.md` (limite : rapprochement par l'heure).
+- [x] Étude de faisabilité, avant tout code : lecture de la puce NFC de la CNI 2021 et du passeport depuis
       un navigateur mobile (sans appli). Rendre un avis écrit : possible, possible avec appli, impossible.
+      Avis : impossible depuis un navigateur, possible avec une appli (`preuvid/docs/nfc-faisabilite.md`).
 - [ ] Accessibilité : cibles tactiles de 44 px, contrastes, lecteur d'écran, animations réduites respectées.
 - [ ] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
 
 Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux minutes pour l'identité.
+
+Écarts relevés en cours de lot (à reprendre au bilan) :
+
+- Visage du passe (selfie, détection du vivant, comparaison à la pièce) : jamais mesuré sur de vrais
+  visages (faux refus, photo ou vidéo rejouée, biais). Le chemin du refus est parcouru de bout en bout ; celui
+  de la réussite n'est couvert que par des tests unitaires (images synthétiques refusées par le vivant).
+- Seule la machine d'états (`backend/src/verification`) a changé, pas `engine/` : le banc de lecture n'est
+  pas concerné.
+- Un ordinateur sans caméra ne peut pas créer de passe. Un majeur présent physiquement peut encore tout
+  faire à la place d'un mineur.
+- Les sessions `parcours: age` créées par un site (API v1) n'ont pas encore le visage : suite à faire.
+- Journaux : les métadonnées de vivant invalides ne sont plus recopiées dans le message d'erreur.
+- Page identité, voyants : « reflets » et « quatre coins » abandonnés. Pas de détection des coins sans
+  modèle ; les reflets ne se distinguent pas sur les cartes synthétiques du banc (claires : 30 à 41 % de
+  pixels saturés sur une photo propre, 13 à 15 % avec reflet). Remplacés par les voyants « lumière » et
+  « pièce » (des bords droits près d'au moins deux côtés du cadre, guidés par un rectangle en pointillés).
+- Seuils de la prise automatique (netteté 800, lumière 130, bords sur 2 côtés, sur l'image réduite à
+  480 px) mesurés sur les images synthétiques du banc seulement. Une carte très inclinée n'est pas
+  reconnue : la prise se fait alors à la main. Le bouton « Prendre la photo moi-même » reste toujours là.
+- Parcours de bout en bout fait avec une fausse caméra (vidéo tirée d'un passeport synthétique) : prise
+  automatique en 2,3 s (attente de 2,5 s voulue après l'ouverture de la caméra), lecture en 10 à 45 s, MRZ et 3 clés sur 3, visage, refus réel par le vivant,
+  suppression des photos à la demande. La réussite (écran « C'est fait ») n'est vue qu'avec un état simulé.
+- Photos des sessions v1 jamais servies au site : ni par `/selfie`, ni par `/api/files`, ni dans la liste
+  ou le détail de la console, y compris pour ses relecteurs et opérateurs. Seuls les administrateurs de
+  la plateforme les voient. Une option par client pourra venir au lot 4.
+- Photos chiffrées sur le disque par défaut (`STORAGE_ENCRYPTION=true`) : vérifié sur la pile (en-tête
+  `IDSW`, plus de JPEG lisible). Les fichiers déjà enregistrés en clair restent lisibles.
+- Le site reçoit nom, prénoms, date de naissance, numéro et validité de la pièce, nationalité et sexe :
+  l'écran 07 le dit. La maquette 03 annonçait « recevra seulement le résultat » : c'est faux pour ce
+  parcours. Le texte de la page a été corrigé ; le fichier de la maquette n'a pas été modifié.
+- Titre de séjour envoyé au moteur comme `national_id` (même format carte, MRZ au verso) : pas de type
+  propre chez Idswyft.
+- Un refus est définitif : pas de « recommencer » sur la page, la personne repasse par le site.
+- Chez Idswyft, un seul recto illisible refuse la session (porte 1, `FRONT_OCR_FAILED`) et prévient le
+  site : vérifié sur la pile. Décision de David (20/11/2026) : 3 essais par côté pour le parcours
+  `identite` v1 (photo illisible seulement : `FRONT_OCR_FAILED`, `FRONT_LOW_CONFIDENCE`,
+  `BACK_BARCODE_NOT_FOUND`, `BACK_MRZ_UNREADABLE`), refus au troisième ; les signaux de fraude refusent
+  tout de suite. Les autres sessions (Idswyft, âge) gardent un seul essai. Vérifié sur la pile : trois
+  photos sans pièce prises à la main donnent deux reprises (« dernier essai » au deuxième échec), puis le
+  refus « recto illisible » ; une photo ratée puis le passeport mènent au visage. Après une photo
+  illisible, la prise automatique s'arrête pour ce côté (le même mauvais objet userait les essais) :
+  vérifié, rien ne part en 10 s, le bouton fait passer la photo. `/restart` d'Idswyft, qui accepte le
+  jeton de la personne, refuse désormais les sessions v1 (409) : il effaçait le refus et le compte d'essais.
+  Ce changement touche `VerificationSession.ts` d'Idswyft : à surveiller à la prochaine reprise amont.
+- Prise automatique durcie en plus (présence de la pièce, attente de 2,5 s, 4 images bonnes de suite) :
+  une scène nette sans pièce filmée 10 s ne déclenche rien. Une feuille de texte, une carte bancaire ou
+  une autre pièce posée à plat ont aussi des bords nets, et le bouton manuel n'a aucun contrôle : les
+  essais couvrent ces cas.
+- Recto puis verso d'une CNI parcouru avec une fausse caméra : prise du recto, lecture, écran du verso,
+  prise du verso. Le banc n'a pas de recto de CNI 2021 : l'essai associe le recto d'une ancienne CNI au
+  verso d'une CNI 2021 d'une autre personne, d'où un refus attendu (`BACK_MRZ_BARCODE_MISMATCH`). Une
+  réussite recto-verso cohérente reste à faire.
+- Le suivi de la lecture ne s'arrête plus sur une erreur réseau passagère : il attend et relit l'état.
+- La voix (option d'Idswyft) n'est pas proposée par la page ; une session qui l'exigerait finirait abandonnée.
+- Pas de page « Comment vos données sont utilisées » : le lien de la maquette 03 attend son texte.
+- Les sessions `parcours: age` créées par l'API restent sur la page d'Idswyft.
 
 ## Lot 4 — Espace client, administration, facturation à l'usage
 

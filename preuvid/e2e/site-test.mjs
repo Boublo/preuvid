@@ -135,6 +135,14 @@ try {
   ok(decAge.corps?.statut === 'validee' && decAge.corps?.majeur === true, 'décision age : validee, majeur true');
   ok(Object.keys(decAge.corps ?? {}).sort().join() === 'majeur,parcours,session,statut', 'décision age : rien d’autre que majeur');
   ok(finAge.corps.majeur === true, 'webhook age : majeur true');
+  // Aucune image après la réponse (securite.md, règle 1). L'effacement suit la réponse : on lui laisse 10 s.
+  let cheminsAge = -1;
+  for (let i = 0; i < 20 && cheminsAge !== 0; i++) {
+    if (i) await new Promise(r => setTimeout(r, 500));
+    ({ rows: [{ n: cheminsAge }] } = await db.query(
+      `select count(*)::int as n from documents where verification_request_id = $1 and file_path is not null`, [age.session]));
+  }
+  ok(cheminsAge === 0, `parcours age : image effacée après la réponse (${cheminsAge} chemin restant)`);
 
   // ── 4. Parcours identite ──────────────────────────────────────────────────────────────────────
   etape('parcours identite');

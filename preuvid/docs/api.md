@@ -141,6 +141,36 @@ dédoublonnage, contenu des anciennes livraisons de webhook, réponse gardée po
 parcours, statut) pour que la facturation et le journal des événements tiennent ; la session n'est plus
 visible par l'API (404).
 
+## Page du parcours `identite` (lot 3)
+
+Le `lien` d'une session `identite` mène à la page Preuvid `/verifier#<jeton>` (maquettes 03 à 07) : choix
+de la pièce, photo du recto puis du verso (sauf passeport) avec prise automatique dès que la pièce est nette
+et bien cadrée,
+lecture, visage (selfie et mouvement de tête), résultat. Le jeton est après le `#` : il n'est jamais envoyé
+au serveur dans l'adresse ni journalisé, et la page le retire de la barre d'adresse dès l'ouverture. Sur
+ordinateur, la page propose un QR code pour continuer sur le téléphone ; l'onglet de l'ordinateur suit
+l'avancement. Le lien d'une session `age` ne change pas.
+
+La page appelle, sans clé d'API, `POST /v1/parcours/etat` et `POST /v1/parcours/effacer-photos` avec
+`{ "jeton": "…" }` dans le corps (120 appels par minute et par adresse). L'état renvoyé ne contient aucun
+champ lu sur la pièce : seulement l'étape attendue, les photos encore possibles pour ce côté, un résumé de la lecture (bande MRZ lue, nombre de clés
+de contrôle justes, pièce encore valide ou non), le motif d'un refus et la durée du parcours. La personne
+peut demander l'effacement de ses photos dès que la session est tranchée (`validee` ou `refusee`) ; la
+décision et les champs lus restent pour vous. Une session `a_revoir` garde ses photos jusqu'à la revue.
+
+Une photo illisible (recto illisible, bande MRZ ou code-barres du verso introuvable ou mal lu) n'arrête
+pas la session : la personne reprend la photo, jusqu'à 3 essais par côté. Au troisième échec d'un même
+côté, la session est refusée (motif « recto illisible », par exemple) et vous êtes prévenu. Les signaux de
+fraude (recto et verso qui ne concordent pas, chiffre de contrôle faux que le recto confirme) refusent la
+session tout de suite.
+
+Un refus est définitif : la page renvoie la personne vers votre site, qui crée une nouvelle session.
+
+**Photos : jamais au site.** Les images d'une session v1 (pièce, selfie) ne sont servies par aucune route
+à votre compte, ni à vos relecteurs ou opérateurs : seuls les administrateurs de la plateforme Preuvid les
+voient, pour la revue manuelle. Elles sont chiffrées sur le disque (AES-256-GCM, `STORAGE_ENCRYPTION=true`
+par défaut, clé `ENCRYPTION_KEY`), puis effacées après [DÉLAI] ou à la suppression de la session.
+
 ## Ce que la v1 ne fait pas encore
 
 - Les règles de conformité configurables d'Idswyft (âge minimal par client, pays acceptés…) ne
