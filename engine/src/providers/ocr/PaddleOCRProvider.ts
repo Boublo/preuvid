@@ -288,6 +288,13 @@ function nameScore(text: string): number {
 
 // ── Provider ──────────────────────────────────────────────────
 
+/**
+ * Sans cache. Par défaut, `ppu-paddle-ocr` garde en mémoire les 10 derniers résultats, indexés sur
+ * les 1 024 premiers octets de l'image et sa taille : deux pièces qui partagent ces octets recevraient
+ * la même lecture, et les données lues resteraient en mémoire après la réponse.
+ */
+export const PADDLE_RECOGNIZE_OPTIONS = { noCache: true } as const;
+
 export class PaddleOCRProvider implements OCRProvider {
   readonly name = 'paddle';
 
@@ -330,7 +337,7 @@ export class PaddleOCRProvider implements OCRProvider {
   async processDocument(buffer: Buffer, documentType: string, issuingCountry?: string, llmConfig?: LLMProviderConfig): Promise<OCRData> {
     const svc         = await this.ensureInitialized();
     const arrayBuffer = new Uint8Array(buffer).buffer;
-    const result: PaddleOcrResult = await svc.recognize(arrayBuffer);
+    const result: PaddleOcrResult = await svc.recognize(arrayBuffer, PADDLE_RECOGNIZE_OPTIONS);
 
     const ocrData: OCRData = {
       raw_text:          result.text,

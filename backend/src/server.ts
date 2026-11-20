@@ -21,6 +21,7 @@ import { logger } from './utils/logger.js';
 import { createGracefulShutdown } from './utils/gracefulShutdown.js';
 import { configureSharedLogger } from '@idswyft/shared';
 import newVerificationRoutes from './routes/newVerification.js';
+import { routerV1 } from './v1/router.js';
 import developerRoutes from './routes/developer/index.js';
 import adminRoutes from './routes/admin.js';
 import adminThresholdsRoutes from './routes/admin-thresholds.js';
@@ -150,6 +151,8 @@ app.use('/api/v2/compliance', conditionalCsrf, complianceRoutes);
 app.use('/api/v2/vault', vaultRoutes);
 app.use('/.well-known', wellKnownRoutes);
 app.use('/api/system', conditionalCsrf, systemRoutes);
+// Preuvid : API v1 (lot 2), hors /api (ni CSRF ni journal d'activité : appels serveur à serveur).
+app.use('/v1', routerV1);
 
 // Cloud-only: platform service-key endpoints (mint/list/rotate/revoke for
 // internal products like GatePass). Stripped from community mirror via
@@ -388,6 +391,19 @@ const startServer = async () => {
         const { consistencyMonitor } = await import('@/services/consistencyMonitor.js');
         consistencyMonitor.start(300000); // 5 minute intervals
         console.log('🔍 Verification consistency monitor started');
+      }
+
+      // Preuvid : reprises des webhooks v1 (1 min, 5 min, 30 min, 2 h) et idempotence expirée.
+      {
+        const { traiterReprises } = await import('./v1/webhooks.js');
+        setInterval(() => {
+          traiterReprises().catch(err => logger.error('v1: reprises de webhooks', { error: String(err) }));
+        }, 60 * 1000);
+        setInterval(() => {
+          const limite = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          Promise.resolve(supabase.from('v1_idempotency').delete().lt('created_at', limite))
+            .catch(err => logger.error('v1: purge idempotence', { error: String(err) }));
+        }, 60 * 60 * 1000);
       }
 
       // Temp file cleanup — runs every 15 minutes, deletes files older than 1 hour

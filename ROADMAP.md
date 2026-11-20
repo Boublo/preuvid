@@ -156,12 +156,9 @@ Score « TOUT » (tous les champs justes) :
 - `geoip-lite` 2.0.2 demande Node 24, alors que les images sont en Node 20 (simple avertissement, tests verts).
 
 **À trancher par David (non traité, hors lot 0).**
-1. Cache de PaddleOCR (`ppu-paddle-ocr` 4.1.1) :
-   - il garde en mémoire les 10 derniers résultats, indexés sur les 1024 premiers octets de l'image et sa
-     taille ;
-   - deux images qui partagent ces octets reçoivent le même résultat, et des données personnelles restent
-     en mémoire ;
-   - correctif d'une ligne : `recognize(…, { noCache: true })`, à passer au banc.
+1. Cache de PaddleOCR (`ppu-paddle-ocr` 4.1.1) : **correctif proposé au lot 2, en attente de l'accord
+   de David** (voir le bilan du lot 2). `recognize(…, { noCache: true })` : plus aucun résultat gardé
+   en mémoire entre deux requêtes. Scores du banc identiques, aucun coût en usage réel.
 2. CORS : `backend/src/config/index.ts` autorise toujours `idswyft.app`, `www.idswyft.app` et
    `staging.idswyft.app`, quel que soit `CORS_ORIGINS`.
 3. Chiffrement des pièces stockées : `STORAGE_ENCRYPTION` est désactivé par défaut. Il n'est pas passé
@@ -244,7 +241,14 @@ Pas de cible pour l'extension.
 - mémoire du moteur : pic 1 022 Mio, moyenne 907 Mio, à peu près constante ;
 - une vérification CNI 2021 (recto et verso) prend donc environ 6 s de calcul sur 2 processeurs,
   soit environ 600 vérifications par heure pour une instance du moteur ;
-- coût de lecture par vérification ≈ `[PRIX DU SERVEUR À L'HEURE]` / 600. La comparaison de visage
+- coût de lecture par vérification ≈ `[PRIX DU SERVEUR À L'HEURE]` / 600.
+- **Correction du 20/11/2026 (lot 2)** : le temps du recto de la CNI 2021 ci-dessus (2,8 s) était aidé par
+  le cache de PaddleOCR. Le banc lit le même fichier en verso puis en recto, et le recto reprenait le
+  résultat du verso. Avec deux photos distinctes, comme en vrai, le recto prend environ 6 s et le verso
+  environ 4 s (mesure témoin du lot 2, avec et sans cache, même machine). Une vérification CNI 2021 prend
+  donc environ 10 s de calcul, soit **350 à 400 vérifications par heure** et par instance du moteur, et
+  non 600 : coût ≈ `[PRIX DU SERVEUR À L'HEURE]` / 375. Les temps « cni2021 / front » des fichiers de
+  scores du lot 1 sont aidés par le cache de la même façon. La comparaison de visage
   et la détection de présence (lot 3) ne sont pas comptées. Le temps processeur exact n'est pas
   relevé (au plus 2 × le temps mesuré).
 
@@ -283,7 +287,7 @@ Pas de cible pour l'extension.
 - Hors lot 1, non modifiés :
   - le repli local du backend lit encore le verso avec Tesseract ;
   - `/extract/ocr` lit la date de naissance au format mois/jour (1952-08-01 au lieu de 1952-01-08).
-- Cache de PaddleOCR (point 1 « À trancher ») : non modifié. La clé porte sur les 1 024 premiers octets
+- Cache de PaddleOCR (point 1 « À trancher ») : non modifié au lot 1, correctif proposé au lot 2. La clé porte sur les 1 024 premiers octets
   du fichier encodé et sur sa taille ; une collision demande deux fichiers de même taille à l'octet.
   Aucune lecture d'une autre identité n'a été observée sur les 432 appels. Le risque sur les données en
   mémoire reste entier ; la décision revient toujours à David.
@@ -292,16 +296,83 @@ Pas de cible pour l'extension.
 
 But : l'interface que les clients intègrent. Détail dans `preuvid/docs/api.md`.
 
-- [ ] `POST /v1/sessions`, `GET /v1/sessions/{id}`, `GET /v1/sessions/{id}/decision`, `DELETE /v1/sessions/{id}`.
+- [x] `POST /v1/sessions`, `GET /v1/sessions/{id}`, `GET /v1/sessions/{id}/decision`, `DELETE /v1/sessions/{id}`.
 - [ ] Clés d'API par application, séparées test / production, hachées en base, affichées une seule fois.
-- [ ] Webhooks signés HMAC-SHA256 avec horodatage, identifiant d'événement, reprises espacées, rejeu manuel.
-- [ ] Idempotence sur la création de session ; limites de débit par clé.
-- [ ] Motif lisible avec chaque décision (« clé de contrôle fausse », « visage 71 sur 100 »).
+      *Partiel, hérité d'Idswyft et non modifié : clés de test et de production séparées (une clé de
+      test ne voit que les sessions de test), hachées en HMAC-SHA256, renvoyées une seule fois à la
+      création (vérifié dans `routes/developer/apiKeys.ts`, la liste n'en montre que le préfixe). La
+      notion d'« application » manque : un compte crée une clé par site, en attendant l'écran du lot 4.*
+- [x] Webhooks signés HMAC-SHA256 avec horodatage, identifiant d'événement, reprises espacées, rejeu manuel.
+      *Rejeu par l'API ; le bouton de l'espace client viendra au lot 4.*
+- [x] Idempotence sur la création de session ; limites de débit par clé.
+- [x] Motif lisible avec chaque décision (« clé de contrôle fausse », « visage 71 sur 100 »).
 - [ ] Renommage : domaines `api.preuvid.fr` / `verif.preuvid.fr`, en-têtes, textes. Retirer le nom et les
       marques Idswyft de tout ce qui est visible (voir `TRADEMARK.md`), garder la licence MIT et la mention d'origine.
-- [ ] Documentation OpenAPI générée et exemples curl.
+      **Bloqué : attend la recherche INPI et l'achat des domaines (David).**
+- [x] Documentation OpenAPI générée et exemples curl.
 
 Fin du lot : un site de test crée une session, la personne fait le parcours, le site reçoit le webhook et le vérifie.
+
+### Bilan du lot 2 (20/11/2026)
+
+**Fin de lot atteinte** sur la pile compose (`preuvid/e2e/`, 23 contrôles, tous verts). Un site de test
+s'inscrit (compte, clé de test, webhook abonné), crée une session `age`, envoie le recto synthétique,
+reçoit `session.terminee` signé et le vérifie sur le corps brut, puis lit `{statut: validee, majeur: true}`
+et rien d'autre. Même chose en `identite` : recto, verso et capture, puis refus `LIVENESS_FAILED` (les
+images du dépôt n'ont pas de visage). Il contrôle ensuite : rejeu manuel (même identifiant d'événement,
+signature neuve), `DELETE` (204, puis 404, `session.supprimee` reçu), plus rien en base, et une clé ou une
+signature inventée refusée. Disque vérifié à la main : plus aucune photo de la session supprimée dans
+`uploads`, et la référence du client absente des journaux de l'API. Idempotence vérifiée : même clé, même session ;
+autre corps, 422.
+
+**Ce qui a été fait** (`backend/src/v1/`, couche à part ; `/api/v2` d'Idswyft n'est pas modifié, la v1 s'y
+branche en deux appels : fin de parcours et revue manuelle) :
+- statuts, décision, motif en français et champs avec l'état de leur clé de contrôle (`decision.ts`) ;
+- webhooks v1 : signature `horodatage.corps`, reprises à 1 min, 5 min, 30 min et 2 h, stockées en base
+  (`v1_webhook_events`) et reprises par une tâche minute, donc maintenues après un redémarrage. Seul un 2xx
+  vaut livraison (Idswyft comptait un 4xx comme livré). Le corps ne contient jamais la référence du client ;
+- idempotence par clé d'API, la place étant réservée avant traitement (deux requêtes simultanées ne créent
+  pas deux sessions) ; 600 lectures et 300 écritures par minute et par clé ; une IP est bloquée au bout de
+  20 échecs d'authentification ;
+- `DELETE` : photos et audio d'abord, puis toutes les tables filles qui peuvent porter une donnée de la
+  personne (dont le coffre, le filtrage AML et les attestations). L'appel peut être relancé et répond 503
+  tant que tout n'est pas parti. Il reste une pierre tombale sans donnée ;
+- OpenAPI 3.1 sur `GET /v1/openapi.json`, confronté par un test aux routes montées ; `preuvid/docs/api.md`
+  réécrit (statuts, vérification de signature côté client, exemples curl) ;
+- migration `20261120_api_v1.sql` (préfixe daté : `migrate.ts` trie par préfixe numérique).
+- Tests : 26 tests v1 ; backend 1 316, engine 41, frontend 48, tous verts (un passage du backend a
+  planté une fois sur une erreur de segmentation de Node, sans échec de test ; vert au passage suivant).
+
+**Cache de PaddleOCR (point 1 « À trancher »), correctif proposé.** `PaddleOCRProvider` passe
+`{ noCache: true }` : plus aucun résultat ni texte lu gardé en mémoire après la réponse, plus de collision
+possible entre deux personnes. Un test vérifie l'option à chaque appel.
+- Banc (`scores/2026-11-20-lot-2-sans-cache.txt`) : scores identiques au lot 1, ligne par ligne ; pic
+  mémoire 1 034 Mio (973 et 1 022 lors des deux passages du lot 1).
+- Temps : le recto de la CNI 2021 passe de 2,7 s à 6,5 s **dans le banc seulement**. Le banc lit le même
+  fichier en verso puis en recto, et le recto profitait du cache. En vrai, recto et verso sont deux photos.
+  Mesure témoin, même machine, en alternance, avec et sans cache : 6,0 s contre 6,2 s (ancienne CNI),
+  3,9 s contre 4,1 s (verso), 5,7 s contre 6,1 s (recto lu en premier). Aucun coût réel. Les temps bruts
+  de ce passage sont plus élevés qu'au lot 1 (machine chargée pendant le banc) : ne pas les comparer.
+
+**Écarts et limites** :
+- Double anonymat du parcours `age` absent (lot 3) : Preuvid sait quel client demande. Le parcours `age` ne
+  doit pas être présenté comme conçu selon le référentiel de l'Arcom avant le lot 3.
+- Les règles de conformité configurables d'Idswyft ne s'appliquent pas aux sessions v1.
+- `session.revue` (après une revue manuelle) n'est vérifié ni par l'essai (il faut une session
+  d'administrateur) ni par un test unitaire. Seul le chargement du module est vérifié dans l'image
+  construite ; un échec est journalisé. À couvrir avec l'écran de revue (lot 4).
+- Limites de débit en mémoire : valables pour une seule instance de l'API (compteur partagé au lot 5).
+- Livraison à un hôte interne : refusée par la protection SSRF, sauf nom exact listé dans
+  `PREUVID_WEBHOOK_HOTES_INTERNES` (vide par défaut ; l'essai y met `site-test`).
+- Le site de test s'inscrit directement en base : l'inscription par l'espace développeur passe par un
+  code envoyé par e-mail.
+- Trouvé en passant, non corrigé (Idswyft) : la purge des anciennes livraisons de webhooks
+  (`runWebhookPayloadCleanup`) met `payload` à `null`, alors que la colonne est `NOT NULL`. La purge
+  échoue donc à chaque fois, et les champs lus restent dans `webhook_deliveries` au-delà des 30 jours.
+  Correctif d'une ligne (`{}` au lieu de `null`), à décider.
+- Modèles : le modèle de voix est épinglé sur une révision Hugging Face (le lien GitHub d'origine avait
+  changé de contenu). L'archive ASR reste sur une publication GitHub modifiable ; son empreinte est
+  vérifiée à chaque construction.
 
 ## Lot 3 — Parcours de vérification et passe majeur
 

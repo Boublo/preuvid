@@ -11,6 +11,11 @@ export const WEBHOOK_EVENTS: Record<string, string> = {
   'verification.manual_review':      'Flagged for manual review',
   'document.expiry_warning':         'Document nearing or past expiry date',
   'verification.reverification_due': 'Scheduled re-verification is due',
+  // Preuvid, API v1 : signés X-Preuvid-Signature (horodatage + corps).
+  'session.terminee':                'Session v1 terminée (validée ou refusée)',
+  'session.a_revoir':                'Session v1 à revoir manuellement',
+  'session.revue':                   'Session v1 revue manuellement',
+  'session.supprimee':               'Session v1 supprimée',
 } as const;
 
 /** All valid event names as a typed array */
