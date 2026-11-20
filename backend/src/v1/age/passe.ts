@@ -42,22 +42,30 @@ const echec = <T>(e: Echec): Resultat<T> => ({ ok: false, echec: e });
 // Les vérifications du passe ne sont rattachées à aucun site : elles vivent sous un compte développeur
 // interne, dont la clé d'API ne peut pas servir (son empreinte vient d'un secret jeté aussitôt).
 
-const EMAIL_INTERNE = 'passe-majeur@preuvid.invalid';
+// Le compte est retrouvé par son identifiant fixe, jamais par son adresse : n'importe qui peut inscrire
+// un compte développeur à l'adresse de son choix (POST /api/developer/register), et le passe se serait
+// alors attaché à ce compte, webhook compris. L'adresse, sans domaine de premier niveau, est en outre
+// refusée par les formulaires d'inscription (isEmail).
+export const ID_INTERNE = '00000000-0000-4000-8000-000000000a9e';
+const EMAIL_INTERNE = 'passe-majeur@interne';
 let interne: Promise<CleApi> | null = null;
 
 async function creerCompteInterne(): Promise<CleApi> {
   // Le mode test d'Idswyft n'abaisse que les seuils du visage ; le parcours âge n'en a pas l'usage.
   const essai = false;
-  let { data: dev } = await supabase.from('developers').select('id').eq('email', EMAIL_INTERNE).maybeSingle();
+  const lire = async () => (await supabase.from('developers').select('id').eq('id', ID_INTERNE).maybeSingle()).data;
+  let dev = await lire();
   if (!dev) {
     const r = await supabase.from('developers')
-      .insert({ email: EMAIL_INTERNE, name: 'Preuvid — passe majeur', is_verified: true }).select('id').single();
+      .insert({ id: ID_INTERNE, email: EMAIL_INTERNE, name: 'Preuvid — passe majeur', is_verified: true }).select('id').single();
     if (r.error && r.error.code !== '23505') throw new Error(`developers: ${r.error.message}`);
-    dev = r.data ?? (await supabase.from('developers').select('id').eq('email', EMAIL_INTERNE).single()).data;
+    // 23505 : créé entre-temps par une autre requête, ou adresse déjà prise par un autre compte (refus).
+    dev = r.data ?? await lire();
+    if (!dev) throw new Error('developers : l’adresse du compte interne du passe appartient à un autre compte');
   }
-  const developerId = (dev as { id: string }).id;
+  const developerId = ID_INTERNE;
   // Jamais de criblage AML ni de voix sur ce compte : le criblage garderait nom et date de naissance.
-  await supabase.from('developers').update({ aml_enabled: false, voice_auth_enabled: false }).eq('id', developerId);
+  await supabase.from('developers').update({ aml_enabled: false, voice_auth_enabled: false, webhook_url: null }).eq('id', developerId);
   const { data: cles } = await supabase.from('api_keys').select('id, is_sandbox')
     .eq('developer_id', developerId).eq('name', 'passe majeur').eq('is_sandbox', essai).limit(1);
   const existante = (cles ?? [])[0] as { id: string; is_sandbox: boolean } | undefined;
@@ -268,19 +276,25 @@ interface LignePasse {
   transports: string[] | null; fenetre_debut: string | null; fenetre_n: number;
 }
 
-/** Compteur glissant d'une heure : renvoie false si la limite est atteinte. */
+/**
+ * Compteur glissant d'une heure : renvoie false si la limite est atteinte.
+ * La mise à jour n'aboutit que si la fenêtre n'a pas bougé depuis la lecture (verrou optimiste) : deux
+ * preuves demandées en même temps ne peuvent pas compter pour une seule. La perdante est refusée.
+ */
 async function compterUsage(p: LignePasse, nouveauCompteur: number, sauvegardee: boolean): Promise<boolean> {
   const maintenant = Date.now();
   const neuve = !p.fenetre_debut || maintenant - new Date(p.fenetre_debut).getTime() >= HEURE_MS;
   const n = neuve ? 1 : p.fenetre_n + 1;
   if (n > LIMITE_PREUVES_HEURE) return false;
-  await supabase.from('v1_age_passes').update({
+  let q = supabase.from('v1_age_passes').update({
     compteur: nouveauCompteur,
     sauvegardee,
     fenetre_n: n,
     ...(neuve && { fenetre_debut: new Date(maintenant).toISOString() }),
-  }).eq('id', p.id);
-  return true;
+  }).eq('id', p.id).eq('fenetre_n', p.fenetre_n);
+  q = p.fenetre_debut ? q.eq('fenetre_debut', p.fenetre_debut) : q.is('fenetre_debut', null);
+  const { data, error } = await q.select('id');
+  return !error && Array.isArray(data) && data.length === 1;
 }
 
 export async function preuveAvecPasse(reponse: AuthenticationResponseJSON, cleId: string, masque: Uint8Array): Promise<Resultat<string>> {

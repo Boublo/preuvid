@@ -181,6 +181,24 @@ describe('visites avec le passe', () => {
     expect(m.base.table('v1_age_passes')[0].fenetre_n).toBe(1);
   });
 
+  it('deux preuves demandées en même temps au bord de la limite : une seule passe', async () => {
+    await passe();
+    m.base.table('v1_age_passes')[0].fenetre_n = LIMITE_PREUVES_HEURE - 1;
+    m.signerAveugle.mockClear();
+    // Les deux requêtes lisent le passe avant que l'une ou l'autre ne l'écrive.
+    let entrees = 0; let lacher!: () => void;
+    const barriere = new Promise<void>(r => { lacher = r; });
+    m.verifyAuthenticationResponse.mockImplementation(async () => {
+      if (++entrees === 2) lacher();
+      await barriere;
+      return { verified: true, authenticationInfo: { newCounter: 0, credentialBackedUp: true } };
+    });
+    const [a, b] = await Promise.all([preuveAvecPasse(await assertion(), CLE, MASQUE), preuveAvecPasse(await assertion(), CLE, MASQUE)]);
+    expect([a.ok, b.ok].filter(Boolean)).toHaveLength(1);
+    expect(m.signerAveugle).toHaveBeenCalledTimes(1);
+    expect(m.base.table('v1_age_passes')[0].fenetre_n).toBe(LIMITE_PREUVES_HEURE);
+  });
+
   it('refuse un passe inconnu, un compteur qui recule, un défi de création', async () => {
     const v = await passe();
     expect(await preuveAvecPasse(await assertion('inconnu'), CLE, MASQUE)).toEqual({ ok: false, echec: 'passe_introuvable' });
@@ -193,6 +211,26 @@ describe('visites avec le passe', () => {
     expect(await preuveAvecPasse(mauvais, CLE, MASQUE)).toEqual({ ok: false, echec: 'defi_invalide' });
     expect(await preuveAvecPasse({ id: 'cred-1', response: { clientDataJSON: 'pas du json' } } as any, CLE, MASQUE))
       .toEqual({ ok: false, echec: 'defi_invalide' });
+  });
+});
+
+describe('compte interne : jamais retrouvé par son adresse', () => {
+  const neuf = async () => { vi.resetModules(); return import('../passe.js'); };
+
+  it('ignore un compte inscrit par un tiers à l’ancienne adresse et crée le sien à l’identifiant fixe', async () => {
+    m.base.table('developers').push({ id: 'tiers', email: 'passe-majeur@preuvid.invalid', webhook_url: 'https://tiers.example/h' });
+    const mod = await neuf();
+    await mod.ouvrirVerification('http://x');
+    const cle = m.base.table('api_keys')[0];
+    expect(cle.developer_id).toBe(mod.ID_INTERNE);
+    expect(m.base.table('developers').find((d: any) => d.id === mod.ID_INTERNE)).toMatchObject({ webhook_url: null });
+  });
+
+  it('refuse de servir si l’adresse interne appartient à un autre compte', async () => {
+    m.base.table('developers').push({ id: 'tiers', email: 'passe-majeur@interne' });
+    const mod = await neuf();
+    await expect(mod.ouvrirVerification('http://x')).rejects.toThrow(/autre compte/);
+    expect(m.base.table('api_keys')).toHaveLength(0);
   });
 });
 
