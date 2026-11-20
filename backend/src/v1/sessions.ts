@@ -196,6 +196,8 @@ export async function supprimerSession(cle: CleApi, id: string): Promise<'suppri
     parSession('phone_otp_rate_limits'),
     parSession('verifiable_credentials'),
     parSession('identity_vault', 'verification_id'),
+    // Réponse de création gardée pour l'idempotence : lien, référence, URL de retour.
+    parSession('v1_idempotency', 'session_id'),
     // Les livraisons de webhooks /api/v2 gardent une copie des champs lus ; payload est NOT NULL.
     supabase.from('webhook_deliveries').update({ payload: {}, response_body: null }).eq('verification_request_id', id),
   ]);

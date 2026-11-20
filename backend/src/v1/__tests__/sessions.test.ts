@@ -70,7 +70,7 @@ describe('supprimerSession', () => {
     const ops = base();
     expect(await supprimerSession(cle, ID)).toBe('supprimee');
     const supprimees = ops.filter(o => o.op === 'delete').map(o => o.table);
-    expect(supprimees).toEqual(expect.arrayContaining(['documents', 'selfies', 'verification_contexts', 'identity_vault', 'aml_screenings']));
+    expect(supprimees).toEqual(expect.arrayContaining(['documents', 'selfies', 'verification_contexts', 'identity_vault', 'aml_screenings', 'v1_idempotency']));
     expect(ops.find(o => o.table === 'webhook_deliveries')?.donnees).toEqual({ payload: {}, response_body: null });
     const tombe = ops.find(o => o.table === 'verification_requests' && o.op === 'update')?.donnees;
     expect(tombe).toMatchObject({ v1_reference: null, session_token_hash: null });

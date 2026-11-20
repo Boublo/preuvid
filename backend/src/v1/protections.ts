@@ -7,7 +7,9 @@
 
 import crypto from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { encryptSecret, decryptSecret } from '@idswyft/shared';
 import { supabase } from '@/config/database.js';
+import config from '@/config/index.js';
 import { logger } from '@/utils/logger.js';
 
 export const LIMITES = { lectures: 600, ecritures: 300, echecsAuthParIp: 20 } as const;
@@ -91,6 +93,25 @@ function empreinte(corps: unknown): string {
 }
 
 /**
+ * La réponse rejouée contient le lien de la personne (jeton de session en clair, que la base ne
+ * garde sinon que haché), la référence client et l'URL de retour : elle est chiffrée au repos.
+ */
+export function scellerReponse(corps: unknown): { chiffre: string } {
+  return { chiffre: encryptSecret(JSON.stringify(corps), config.encryptionKey) };
+}
+
+/** Réponse déchiffrée, ou undefined si elle est illisible (clé changée, ligne ancienne). */
+export function ouvrirReponse(stockee: unknown): unknown {
+  const chiffre = (stockee as { chiffre?: unknown } | null)?.chiffre;
+  if (typeof chiffre !== 'string') return undefined;
+  try {
+    return JSON.parse(decryptSecret(chiffre, config.encryptionKey));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Idempotence de POST, par clé d'API. La clé d'idempotence est réservée avant le traitement
  * (clé primaire) : une seconde requête identique pendant le traitement reçoit 409, après le
  * traitement la même réponse ; un corps différent sous la même clé reçoit 422. Une réponse
@@ -124,8 +145,14 @@ export async function idempotence(req: Request, res: Response, next: NextFunctio
       if (existante.response_status == null) {
         return erreurV1(res, 409, 'idempotence_en_cours', 'Une requête avec cette Idempotency-Key est en cours.');
       }
+      const rejouee = ouvrirReponse(existante.response_body);
+      if (rejouee === undefined) {
+        // Ne pas recréer de session : le client a peut-être déjà la première.
+        logger.error('v1: réponse idempotente illisible');
+        return erreurV1(res, 503, 'idempotence_indisponible', 'Réessayez avec une nouvelle Idempotency-Key.');
+      }
       res.setHeader('Idempotent-Replayed', 'true');
-      return res.status(existante.response_status).json(existante.response_body);
+      return res.status(existante.response_status).json(rejouee);
     }
   }
   if (error) {
@@ -137,7 +164,12 @@ export async function idempotence(req: Request, res: Response, next: NextFunctio
   res.json = (corps: unknown) => {
     const status = res.statusCode;
     const suite = status >= 200 && status < 300
-      ? supabase.from('v1_idempotency').update({ response_status: status, response_body: corps })
+      ? supabase.from('v1_idempotency').update({
+        response_status: status,
+        response_body: scellerReponse(corps),
+        // Rattache la ligne à la session pour que DELETE /v1/sessions/{id} l'efface.
+        session_id: (corps as { session?: string } | null)?.session ?? null,
+      })
         .eq('api_key_id', apiKeyId).eq('key', cleIdem)
       : supabase.from('v1_idempotency').delete().eq('api_key_id', apiKeyId).eq('key', cleIdem);
     Promise.resolve(suite).catch(err => logger.error('v1: idempotence non enregistrée', { error: String(err) }));

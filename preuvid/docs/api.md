@@ -121,6 +121,8 @@ reçue mais pas acquittée à temps.
 `Idempotency-Key` (200 caractères au plus) sur `POST /v1/sessions` : la même clé avec le même corps
 renvoie la même réponse pendant 24 h (en-tête `Idempotent-Replayed: true`). Même clé, autre corps : 422.
 Même clé pendant que la première requête est en cours : 409. Une réponse d'erreur libère la clé.
+La réponse gardée contient le lien de la personne : elle est chiffrée en base (`ENCRYPTION_KEY`) et
+effacée avec la session.
 
 ## Limites
 
@@ -135,7 +137,7 @@ il faudra un compteur partagé (Postgres ou Redis) ; c'est noté pour le lot 5.
 
 `DELETE` efface d'abord les photos (pièce, selfie). Si cet effacement échoue, rien d'autre n'est touché
 et l'appel renvoie 503. Ensuite : documents, selfies, scores, état du parcours, empreintes de
-dédoublonnage, contenu des anciennes livraisons de webhook. Il reste une ligne vide (identifiant, dates,
+dédoublonnage, contenu des anciennes livraisons de webhook, réponse gardée pour l'idempotence. Il reste une ligne vide (identifiant, dates,
 parcours, statut) pour que la facturation et le journal des événements tiennent ; la session n'est plus
 visible par l'API (404).
 

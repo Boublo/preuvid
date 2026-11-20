@@ -1,5 +1,6 @@
 vi.mock('@/config/database.js', () => ({ supabase: { from: vi.fn() } }));
 vi.mock('@/utils/logger.js', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('@/config/index.js', () => ({ default: { encryptionKey: 'cle-de-test-pour-le-chiffrement-32c' } }));
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabase } from '@/config/database.js';
@@ -93,6 +94,34 @@ describe('idempotence', () => {
     const c = appel({ parcours: 'identite' });
     await idempotence(c.req, c.res, c.next);
     expect(c.res.statusCode).toBe(422);
+  });
+
+  it('garde la réponse chiffrée, rattachée à sa session', async () => {
+    const a = appel({ parcours: 'age' });
+    await idempotence(a.req, a.res, a.next);
+    const lien = 'https://parcours.example.test/user-verification?session=jeton-secret';
+    a.res.status(201).json({ session: 's1', lien, reference: 'commande-42' });
+    await new Promise(r => setTimeout(r, 0));
+    const ligne = lignes.get('key-1|idem-1');
+    expect(ligne.session_id).toBe('s1');
+    expect(JSON.stringify(ligne.response_body)).not.toMatch(/jeton-secret|commande-42/);
+
+    const b = appel({ parcours: 'age' });
+    await idempotence(b.req, b.res, b.next);
+    expect(b.res.corps).toEqual({ session: 's1', lien, reference: 'commande-42' });
+  });
+
+  it('réponse illisible : 503, sans recréer de session', async () => {
+    const a = appel({ parcours: 'age' });
+    await idempotence(a.req, a.res, a.next);
+    a.res.status(201).json({ session: 's1' });
+    await new Promise(r => setTimeout(r, 0));
+    lignes.get('key-1|idem-1').response_body = { session: 's1' };   // ancienne ligne en clair
+
+    const b = appel({ parcours: 'age' });
+    await idempotence(b.req, b.res, b.next);
+    expect(b.next).not.toHaveBeenCalled();
+    expect(b.res.statusCode).toBe(503);
   });
 
   it('une réponse d’erreur libère la clé', async () => {
