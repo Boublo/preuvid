@@ -394,7 +394,11 @@ But : les écrans mobiles des maquettes 03 à 10. Détail dans `preuvid/docs/ver
 - [x] Étude de faisabilité, avant tout code : lecture de la puce NFC de la CNI 2021 et du passeport depuis
       un navigateur mobile (sans appli). Rendre un avis écrit : possible, possible avec appli, impossible.
       Avis : impossible depuis un navigateur, possible avec une appli (`preuvid/docs/nfc-faisabilite.md`).
-- [ ] Accessibilité : cibles tactiles de 44 px, contrastes, lecteur d'écran, animations réduites respectées.
+- [x] Accessibilité : cibles tactiles de 44 px, contrastes, lecteur d'écran, animations réduites respectées.
+      Écrans 03 à 07 audités avec axe-core (WCAG 2.2 A et AA) et au clavier : aucune violation, aucune cible
+      sous 44 px, pas de défilement horizontal à 320 px, contour du focus lisible partout (lilas sur les
+      écrans sombres, 9,6:1). Lecteur d'écran : vérifié par l'arbre d'accessibilité et les régions annoncées,
+      pas encore avec VoiceOver ni TalkBack (à faire avec l'essai sur appareils réels).
 - [ ] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
 
 Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux minutes pour l'identité.
@@ -428,6 +432,14 @@ Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux min
 - Le site reçoit nom, prénoms, date de naissance, numéro et validité de la pièce, nationalité et sexe :
   l'écran 07 le dit. La maquette 03 annonçait « recevra seulement le résultat » : c'est faux pour ce
   parcours. Le texte de la page a été corrigé ; le fichier de la maquette n'a pas été modifié.
+- Accessibilité, corrections faites : contour du focus invisible sur les écrans sombres (1,6:1, passé à
+  9,6:1, page `/age` comprise) ; voyants de la photo annoncés jusqu'à quatre fois par seconde, remplacés
+  par une consigne d'une phrase, annoncée seulement quand elle change et au plus toutes les 3 s ; après une
+  photo illisible, le focus va au message d'erreur (avant : au titre, qui pouvait couvrir l'alerte) ;
+  titre de l'onglet propre à chaque écran ; `aria-label` interdit retiré de la marque ; bouton
+  « Demander la suppression maintenant » sorti de la phrase (26 px de haut, 44 maintenant).
+  Reste ouvert : la détection du vivant demande de tourner la tête, et la page ne propose aucune autre
+  voie à qui ne le peut pas. Question à trancher avec David.
 - Titre de séjour envoyé au moteur comme `national_id` (même format carte, MRZ au verso) : pas de type
   propre chez Idswyft.
 - Un refus est définitif : pas de « recommencer » sur la page, la personne repasse par le site.

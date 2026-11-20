@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { gris, juger, LARGEUR_MESURE, mesurer, recadrage, Stabilite, type Jugement } from './qualite';
+import { ANNONCE_MS, consigne, gris, juger, LARGEUR_MESURE, mesurer, recadrage, Stabilite, type Jugement } from './qualite';
 
 export const RAPPORT_CARTE = 1.586; // ISO/IEC 7810 ID-1 : 85,6 × 54 mm
 const INTERVALLE_MS = 250;
@@ -43,6 +43,7 @@ export function Capture({ flux, camera, allumer, envoyer, occupe, note, auto = t
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [jugement, setJugement] = useState<Jugement | null>(null);
+  const [annonce, setAnnonce] = useState('');
   const pris = useRef(false);
   const rappel = useRef(envoyer);
   rappel.current = envoyer;
@@ -56,6 +57,7 @@ export function Capture({ flux, camera, allumer, envoyer, occupe, note, auto = t
     const stabilite = new Stabilite();
     const toile = document.createElement('canvas');
     const debut = Date.now();
+    let derniere = { texte: '', a: 0 };
     const minuterie = setInterval(() => {
       if (pris.current || !v.videoWidth) return;
       const r = recadrage(v.videoWidth, v.videoHeight, RAPPORT_CARTE);
@@ -66,6 +68,8 @@ export function Capture({ flux, camera, allumer, envoyer, occupe, note, auto = t
       ctx.drawImage(v, r.x, r.y, r.largeur, r.hauteur, 0, 0, l, h);
       const j = juger(mesurer(gris(ctx.getImageData(0, 0, l, h).data, l, h), l, h));
       setJugement(j);
+      const texte = consigne(j, auto);
+      if (texte !== derniere.texte && Date.now() - derniere.a >= ANNONCE_MS) { derniere = { texte, a: Date.now() }; setAnnonce(texte); }
       if (stabilite.ajouter(j.bonne) && auto && Date.now() - debut >= DELAI_MISE_AU_POINT_MS) {
         pris.current = true;
         void photographier(v).then(b => { if (b) rappel.current(b); else pris.current = false; });
@@ -91,7 +95,7 @@ export function Capture({ flux, camera, allumer, envoyer, occupe, note, auto = t
         <span className="coins" aria-hidden="true" />
         <span className="guide" aria-hidden="true" />
       </div>
-      <dl className="indicateurs" aria-live="polite">
+      <dl className="indicateurs">
         <div className={jugement ? (jugement.net ? 'ok' : 'non') : ''}>
           <dt>Netteté</dt><dd>{!jugement ? '…' : jugement.net ? 'bonne' : 'tenez immobile'}</dd>
         </div>
@@ -102,6 +106,7 @@ export function Capture({ flux, camera, allumer, envoyer, occupe, note, auto = t
           <dt>Pièce</dt><dd>{!jugement ? '…' : jugement.piece ? 'dans le cadre' : 'alignez-la'}</dd>
         </div>
       </dl>
+      <p className="sr" role="status">{annonce}</p>
       <p role="alert" className="message" hidden={!message}>{message}</p>
       <div className="bas">
         {flux && (

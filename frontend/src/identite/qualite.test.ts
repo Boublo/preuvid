@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { gris, juger, mesurer, recadrage, Stabilite } from './qualite';
+import { consigne, gris, juger, mesurer, recadrage, Stabilite } from './qualite';
 
 const L = 60, H = 40;
 const image = (f: (x: number, y: number) => number) => {
@@ -62,5 +62,16 @@ describe('cadre et stabilité', () => {
     const s = new Stabilite(3);
     expect([true, true, false, true, true].map(b => s.ajouter(b))).toEqual([false, false, false, false, false]);
     expect(s.ajouter(true)).toBe(true);
+  });
+});
+
+describe('consigne pour les lecteurs d’écran', () => {
+  const j = (net: boolean, eclaire: boolean, piece: boolean) => ({ net, eclaire, piece, bonne: net && eclaire && piece });
+  it('une seule phrase qui dit quoi corriger', () => {
+    expect(consigne(null, true)).toBe('');
+    expect(consigne(j(true, true, true), true)).toBe('Pièce bien cadrée. Ne bougez plus, la photo part.');
+    expect(consigne(j(true, true, true), false)).toBe('Pièce bien cadrée. Vous pouvez prendre la photo.');
+    expect(consigne(j(false, false, false), true)).toBe('Alignez la pièce sur les pointillés. Image floue : tenez immobile. Trop sombre : rapprochez-vous de la lumière.');
+    expect(consigne(j(true, false, true), true)).toBe('Trop sombre : rapprochez-vous de la lumière.');
   });
 });

@@ -35,7 +35,7 @@
 
 .lien.fichier { position: relative; text-align: center; }
 .lien.fichier .sr { position: absolute; }
-.lien.fichier:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.lien.fichier:has(input:focus-visible) { outline: 3px solid var(--contour); outline-offset: 3px; }
 .lien.fichier.occupe { opacity: .55; cursor: wait; }
 
 /* Visage sur fond sombre. */
@@ -55,5 +55,8 @@
 a.bouton { text-decoration: none; }
 a.bouton:hover { color: #FFFFFF; }
 
-.lien-texte { display: inline; padding: 0; background: none; border: 0; font: inherit; color: var(--encre); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.lien-texte:disabled { cursor: wait; opacity: .6; }
+.lien.effacer { margin-top: 4px; }
+.lien.effacer:disabled { cursor: wait; opacity: .6; }
+
+/* Message d'erreur : reçoit le focus après une photo illisible, pour être lu avant le reste. */
+.message[tabindex="-1"]:focus { outline: none; }

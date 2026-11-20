@@ -11,6 +11,8 @@
   --ambre: #7A4E00;
   --vert: #1B6245;
   --blanc: #FBFBF8;
+  /* Contour du focus : violet sur papier (9,5:1), lilas sur les écrans sombres (9,6:1). */
+  --contour: var(--tampon);
   --titre: 'Archivo Variable', Archivo, system-ui, sans-serif;
   --texte: 'Archivo Variable', Archivo, system-ui, sans-serif;
   --machine: 'IBM Plex Mono', ui-monospace, monospace;
@@ -21,12 +23,12 @@ html, body { margin: 0; background: var(--papier); color: var(--encre); }
 body { font-family: var(--texte); font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
 a { color: var(--encre); }
 a:hover { color: var(--tampon); }
-:focus-visible { outline: 3px solid var(--tampon); outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--contour); outline-offset: 3px; }
 /* Le titre reçoit le focus à chaque écran pour les lecteurs d'écran ; il n'est pas cliquable. */
 h1[tabindex="-1"]:focus { outline: none; }
 
 .page { min-height: 100dvh; max-width: 440px; margin: 0 auto; padding: 24px 24px 28px; display: flex; flex-direction: column; position: relative; overflow: hidden; }
-.page.sombre { background: var(--encre); color: var(--papier); max-width: none; }
+.page.sombre { background: var(--encre); color: var(--papier); max-width: none; --contour: #C9B8FF; }
 .page.sombre > * { width: 100%; max-width: 392px; margin-left: auto; margin-right: auto; }
 .sombre a { color: var(--papier); }
 
@@ -49,7 +51,7 @@ h1 { font-family: var(--titre); font-stretch: 125%; font-weight: 600; letter-spa
 .option input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .option:has(input:checked) { background: var(--encre); color: var(--papier); }
 .option:has(input:checked) small { color: #C7CCC4; }
-.option:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.option:has(input:focus-visible) { outline: 3px solid var(--contour); outline-offset: 3px; }
 .option:has(input:disabled) { opacity: .6; cursor: not-allowed; }
 .option strong { display: block; font-weight: 600; font-size: 17px; }
 .option small { display: block; color: var(--encre-douce); font-size: 14px; }
@@ -85,7 +87,7 @@ h1 { font-family: var(--titre); font-stretch: 125%; font-weight: 600; letter-spa
 /* Bouton « prendre la photo » : un libellé qui enveloppe un champ fichier caché mais focalisable. */
 .bouton.photo { position: relative; }
 .bouton.photo .sr { position: absolute; }
-.bouton.photo:has(input:focus-visible) { outline: 3px solid var(--tampon); outline-offset: 3px; }
+.bouton.photo:has(input:focus-visible) { outline: 3px solid var(--contour); outline-offset: 3px; }
 .bouton.photo.occupe { opacity: .55; cursor: wait; transform: none; }
 .bas > .note:first-child { margin: 0 0 10px; }
 

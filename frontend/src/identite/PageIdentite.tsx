@@ -32,7 +32,7 @@ function Entete({ indice, etape, machine = false }: { indice: string; etape: 0 |
   return (
     <>
       <header className="entete">
-        <span className="marque" aria-label="Preuvid">Preuvid<span>.</span></span>
+        <span className="marque">Preuvid<span aria-hidden="true">.</span></span>
         <span className={`indice${machine ? ' machine' : ''}`}>{indice}</span>
       </header>
       <div className="progression" aria-hidden="true">
@@ -61,6 +61,7 @@ export function PageIdentite() {
   const [effacement, setEffacement] = useState<'non' | 'encours' | 'echec'>('non');
   const fluxCourant = useRef<MediaStream | null>(null);
   const titre = useRef<HTMLHeadingElement>(null);
+  const zoneMessage = useRef<HTMLParagraphElement>(null);
 
   // ── État serveur ────────────────────────────────────────────────────────────────────────────
   const lire = useCallback(async (): Promise<api.Etat | null> => {
@@ -110,7 +111,14 @@ export function PageIdentite() {
     return () => clearInterval(minuterie);
   }, [attenteServeur, lire]);
 
-  useEffect(() => { titre.current?.focus(); }, [ecran, cote]);
+  // À chaque écran, le focus va au titre (lu par les lecteurs d'écran), ou au message d'erreur s'il y en a
+  // un : après une photo illisible, c'est lui qu'il faut entendre d'abord. L'onglet porte le titre de l'écran.
+  useEffect(() => {
+    const m = zoneMessage.current;
+    (m && !m.hidden ? m : titre.current)?.focus();
+    const t = titre.current?.textContent?.trim();
+    if (t) document.title = `${t} · Preuvid`;
+  }, [ecran, cote]);
 
   // ── Caméra arrière, pour la pièce ──────────────────────────────────────────────────────────
   const couper = useCallback(() => {
@@ -187,7 +195,7 @@ export function PageIdentite() {
     }
   };
 
-  const zoneErreur = <p role="alert" className="message" hidden={!erreur}>{erreur}</p>;
+  const zoneErreur = <p ref={zoneMessage} role="alert" className="message" tabIndex={-1} hidden={!erreur}>{erreur}</p>;
   const etapeAffichee = numeroEtape(ecran === 'chargement' || ecran === 'telephone' ? 'choix' : ecran);
   const retour = adresseRetour(etat?.retour ?? null);
 
@@ -195,13 +203,14 @@ export function PageIdentite() {
     etat.photos === 'effacees'
       ? <p className="note" role="status">Vos photos sont supprimées.</p>
       : (
-        <p className="note">
-          Photos supprimées après [DÉLAI].{' '}
-          <button className="lien-texte" onClick={() => void effacer()} disabled={effacement === 'encours'}>
+        <>
+          {/* Bouton sur sa propre ligne, pas dans la phrase : cible tactile de 44 px (ROADMAP, lot 3). */}
+          <p className="note">Photos supprimées après [DÉLAI].</p>
+          <button className="lien effacer" onClick={() => void effacer()} disabled={effacement === 'encours'}>
             {effacement === 'encours' ? 'Suppression…' : 'Demander la suppression maintenant'}
           </button>
-          {effacement === 'echec' && <span role="alert"> La suppression n’a pas abouti : réessayez dans un instant.</span>}
-        </p>
+          {effacement === 'echec' && <p className="note" role="alert">La suppression n’a pas abouti : réessayez dans un instant.</p>}
+        </>
       )
   );
 
@@ -297,7 +306,7 @@ export function PageIdentite() {
           <Entete indice={indiceEtape(1)} etape={1} />
           <h1 ref={titre} tabIndex={-1}>{piece.type === 'passport' ? 'On lit votre passeport' : 'On lit votre carte'}</h1>
           <p className="chapeau" role="status">Quelques secondes. Gardez cette page ouverte.</p>
-          <dl className="registre lecture">
+          <dl className="registre lecture" aria-live="polite">
             <div><dt>Photo reçue</dt><dd>{envoi ? 'envoi…' : 'faite'}</dd></div>
             <div><dt>Bande du bas lue</dt><dd>{lecture?.mrz ? 'faite' : '…'}</dd></div>
             <div><dt>Clés de contrôle</dt><dd>{lecture?.cles ? `${lecture.cles.justes} sur ${lecture.cles.total}` : '…'}</dd></div>

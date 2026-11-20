@@ -14,7 +14,7 @@ export function texteErreur(err: unknown): string {
 export function Entete({ indice, machine = false }: { indice: string; machine?: boolean }) {
   return (
     <header className="entete">
-      <span className="marque" aria-label="Preuvid">Preuvid<span>.</span></span>
+      <span className="marque">Preuvid<span aria-hidden="true">.</span></span>
       <span className={`indice${machine ? ' machine' : ''}`}>{indice}</span>
     </header>
   );

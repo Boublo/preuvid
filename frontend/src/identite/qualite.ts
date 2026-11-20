@@ -88,6 +88,23 @@ export function juger(m: Mesure): Jugement {
 }
 
 /**
+ * Consigne lue par les lecteurs d'écran : une phrase qui résume les trois voyants. Les voyants eux-mêmes
+ * changent jusqu'à quatre fois par seconde ; les annoncer tels quels rendrait la page inaudible.
+ */
+export function consigne(j: Jugement | null, auto: boolean): string {
+  if (!j) return '';
+  if (j.bonne) return auto ? 'Pièce bien cadrée. Ne bougez plus, la photo part.' : 'Pièce bien cadrée. Vous pouvez prendre la photo.';
+  return [
+    !j.piece && 'Alignez la pièce sur les pointillés.',
+    !j.net && 'Image floue : tenez immobile.',
+    !j.eclaire && 'Trop sombre : rapprochez-vous de la lumière.',
+  ].filter(Boolean).join(' ');
+}
+
+/** Intervalle minimal entre deux consignes annoncées. */
+export const ANNONCE_MS = 3000;
+
+/**
  * Partie de l'image de la caméra visible dans le cadre (vidéo affichée « object-fit: cover ») :
  * c'est elle qu'on mesure et qu'on envoie.
  */
