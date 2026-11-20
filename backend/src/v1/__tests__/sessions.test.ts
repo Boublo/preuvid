@@ -8,12 +8,14 @@ vi.mock('@/services/sessionPersistence.js', () => ({
   loadSessionState: vi.fn(async () => ({ current_step: 'COMPLETE' })),
 }));
 vi.mock('@/verification/session/VerificationSession.js', () => ({ VerificationSession: class {} }));
-const { deleteFile, emettre } = vi.hoisted(() => ({
+const { deleteFile, emettre, mesurerSession } = vi.hoisted(() => ({
   deleteFile: vi.fn(async () => undefined),
   emettre: vi.fn(async () => undefined),
+  mesurerSession: vi.fn(async () => null),
 }));
 vi.mock('@/services/storage.js', () => ({ StorageService: class { deleteFile = deleteFile; } }));
 vi.mock('../webhooks.js', () => ({ emettre }));
+vi.mock('../mesures.js', () => ({ mesurerSession }));
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { supabase } from '@/config/database.js';
@@ -56,7 +58,7 @@ function base(opts: { echec?: string; echecLecture?: string; mode?: string } = {
   return ops;
 }
 
-beforeEach(() => { deleteFile.mockClear(); emettre.mockClear(); });
+beforeEach(() => { deleteFile.mockClear(); emettre.mockClear(); mesurerSession.mockClear(); });
 
 describe('effacerFichiers', () => {
   it('un fichier local déjà absent compte comme effacé (suppression relançable)', async () => {
@@ -96,6 +98,9 @@ describe('supprimerSession', () => {
   it('efface les tables filles, vide les anciennes livraisons, puis pose la pierre tombale', async () => {
     const ops = base();
     expect(await supprimerSession(cle, ID)).toBe('supprimee');
+    // Abandons et durées : la session est comptée avant l'effacement des photos.
+    expect(mesurerSession).toHaveBeenCalledWith(ID, true);
+    expect(mesurerSession.mock.invocationCallOrder[0]).toBeLessThan(deleteFile.mock.invocationCallOrder[0] ?? Infinity);
     const supprimees = ops.filter(o => o.op === 'delete').map(o => o.table);
     expect(supprimees).toEqual(expect.arrayContaining(['documents', 'selfies', 'verification_contexts', 'identity_vault', 'aml_screenings', 'v1_idempotency']));
     expect(ops.find(o => o.table === 'webhook_deliveries')?.donnees).toEqual({ payload: {}, response_body: null });

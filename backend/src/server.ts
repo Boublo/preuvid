@@ -414,6 +414,11 @@ const startServer = async () => {
         setInterval(() => {
           purgerAge().catch(err => logger.error('passe : purge', { error: String(err) }));
         }, 60 * 60 * 1000);
+        // Abandons et durées par étape : sessions dont le lien a expiré (sans donnée personnelle).
+        const { mesurerParcours } = await import('./v1/mesures.js');
+        setInterval(() => {
+          mesurerParcours().catch(err => logger.error('mesures : passage horaire', { error: String(err) }));
+        }, 60 * 60 * 1000);
       }
 
       // Temp file cleanup — runs every 15 minutes, deletes files older than 1 hour

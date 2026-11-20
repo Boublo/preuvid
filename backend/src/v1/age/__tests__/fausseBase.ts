@@ -1,6 +1,6 @@
 /**
  * Base en mémoire pour les tests du passe : juste ce que le client PgQueryBuilder offre et que le
- * code du passe utilise (select, insert, update, delete avec RETURNING, filtres eq/gt/gte/lt/lte).
+ * code du passe et des mesures utilisent (select, insert, update, delete avec RETURNING, filtres eq/gt/gte/lt/lte/is/not is).
  */
 
 type Ligne = Record<string, any>;
@@ -55,6 +55,10 @@ export function fausseBase(clesPrimaires: Record<string, string> = {}) {
       lt: (c: string, v: any) => { filtres.push(l => l[c] < v); return q; },
       lte: (c: string, v: any) => { filtres.push(l => l[c] <= v); return q; },
       is: (c: string, v: any) => { filtres.push(l => (l[c] ?? null) === v); return q; },
+      not: (c: string, o: string, v: any) => {
+        if (o !== 'is') throw new Error(`fausseBase : not(${o}) non géré`);
+        filtres.push(l => (l[c] ?? null) !== v); return q;
+      },
       order: (c: string, o?: { ascending?: boolean }) => { tri = { col: c, asc: o?.ascending !== false }; return q; },
       limit: (n: number) => { limite = n; return q; },
       single: () => { unique = 'single'; return q; },

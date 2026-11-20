@@ -220,6 +220,15 @@ export async function supprimerSession(cle: CleApi, id: string): Promise<'suppri
   const s = await lire(cle, id);
   if (!s) return 'introuvable';
 
+  // Abandons et durées (./mesures.ts) : compter la session avant d'effacer ce qui la mesure.
+  // Import différé : mesures → parcours → sessions.
+  try {
+    const { mesurerSession } = await import('./mesures.js');
+    await mesurerSession(id, true);
+  } catch (err) {
+    logger.error('mesures : session supprimée non comptée', { error: err instanceof Error ? err.message : String(err) });
+  }
+
   const fichiersEffaces = await effacerFichiers(id);
   if (!fichiersEffaces) return 'echec_fichiers';
 

@@ -19,6 +19,7 @@ import { creerSession, lireDecision, supprimerSession, type CleApi } from '../se
 import { loadSessionState } from '@/services/sessionPersistence.js';
 import { signerAveugle } from './cles.js';
 import { MARQUE_VISAGE } from './visage.js';
+import { ID_INTERNE } from './compte.js';
 
 export const LIMITE_PREUVES_HEURE = Number(process.env.PREUVID_PASSE_PREUVES_PAR_HEURE || 20);
 const DUREE_DEFI_MS = 5 * 60 * 1000;
@@ -46,7 +47,7 @@ const echec = <T>(e: Echec): Resultat<T> => ({ ok: false, echec: e });
 // un compte développeur à l'adresse de son choix (POST /api/developer/register), et le passe se serait
 // alors attaché à ce compte, webhook compris. L'adresse, sans domaine de premier niveau, est en outre
 // refusée par les formulaires d'inscription (isEmail).
-export const ID_INTERNE = '00000000-0000-4000-8000-000000000a9e';
+export { ID_INTERNE };
 const EMAIL_INTERNE = 'passe-majeur@interne';
 let interne: Promise<CleApi> | null = null;
 

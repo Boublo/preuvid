@@ -75,12 +75,13 @@ type Ligne = V1Row & {
   developer_id: string;
   v1_return_url: string | null;
   v1_deleted_at: string | null;
+  v1_ouverte_le: string | null;
   manual_review_reason: string | null;
 };
 
 async function ligneDuJeton(jeton: string): Promise<Ligne | null> {
   const { data } = await supabase.from('verification_requests')
-    .select('id, status, developer_id, v1_parcours, v1_return_url, v1_deleted_at, session_token_expires_at, manual_review_reason, created_at')
+    .select('id, status, developer_id, v1_parcours, v1_return_url, v1_deleted_at, v1_ouverte_le, session_token_expires_at, manual_review_reason, created_at')
     .eq('session_token_hash', hashHandoffToken(jeton)).maybeSingle();
   const l = data as Ligne | null;
   // Seul le parcours identité passe par cette page ; une session supprimée n'existe plus.
@@ -105,6 +106,11 @@ async function photosPresentes(id: string): Promise<boolean> {
 export async function etatParcours(jeton: string) {
   const ligne = await ligneDuJeton(jeton);
   if (!ligne) return null;
+  // Mesure des abandons (./mesures.ts) : première ouverture de la page, une seule fois.
+  if (!ligne.v1_ouverte_le) {
+    await Promise.resolve(supabase.from('verification_requests').update({ v1_ouverte_le: new Date().toISOString() })
+      .eq('id', ligne.id).is('v1_ouverte_le', null)).catch(() => {});
+  }
   const [etat, site, photos] = await Promise.all([loadSessionState(ligne.id), nomDuSite(ligne.developer_id), photosPresentes(ligne.id)]);
   const statut = statutV1(ligne, etat);
   const etape = etapeParcours(etat, statut);

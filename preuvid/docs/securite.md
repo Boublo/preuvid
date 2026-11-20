@@ -18,6 +18,10 @@ Les photos de pièces et de visages sont des données sensibles (biométrie au s
 10. **Secrets** : jamais dans le dépôt ; `.env` hors Git ; rotation documentée.
 11. **Fichiers reçus** : type vérifié par octets magiques, taille bornée, image réencodée avant traitement.
 12. **Sauvegardes** : chiffrées, restauration testée, même durée de vie que les données.
+13. **Mesures d'usage** : abandons et durées par étape comptés une fois par session dans `v1_mesures`
+    (`backend/src/v1/mesures.ts`) : jour, parcours, issue, nombre de photos par côté, durées arrondies à 5 s.
+    Ni identifiant de session, ni site, ni heure, ni adresse IP, ni navigateur. Relevé réservé aux
+    administrateurs de la plateforme (`GET /api/admin/preuvid/mesures`).
 
 À produire avant l'ouverture (lot 5) : registre des traitements, analyse d'impact, contrat de sous-traitance, test d'intrusion.
 Certifications (iBeta, ISO 27001, SOC 2) : aucune la première année ; ne pas s'en prévaloir.

@@ -399,7 +399,18 @@ But : les écrans mobiles des maquettes 03 à 10. Détail dans `preuvid/docs/ver
       sous 44 px, pas de défilement horizontal à 320 px, contour du focus lisible partout (lilas sur les
       écrans sombres, 9,6:1). Lecteur d'écran : vérifié par l'arbre d'accessibilité et les régions annoncées,
       pas encore avec VoiceOver ni TalkBack (à faire avec l'essai sur appareils réels).
-- [ ] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
+- [x] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
+      `backend/src/v1/mesures.ts` : une ligne par session finie dans `v1_mesures`, écrite une seule fois
+      (marque conditionnelle `v1_mesuree_le`), au passage horaire pour les liens expirés et juste avant
+      toute suppression (site ou passe). Issues : page jamais ouverte, ouverte sans photo, abandon au recto,
+      au verso, au visage, validée, refusée, à revoir, supprimée en cours. Parcours identité, passe majeur
+      et vérifications d'âge des sites. Relevé par parcours et par étape (atteintes, abandons, taux, médiane,
+      90e centile) : `GET /api/admin/preuvid/mesures?du=&au=`, administrateurs de la plateforme seulement.
+      Vérifié sur la pile : quatre sessions réelles (recto envoyé puis lien expiré, ouverte sans photo,
+      jamais ouverte, supprimée par le site après le recto) donnent les quatre bonnes lignes ; un second
+      passage n'ajoute rien ; une vérification du passe ouverte puis purgée à l'expiration donne `passe`,
+      `sans_photo`, page ouverte ; la route refuse sans jeton d'administrateur (401). Les essais ratés
+      font bien chacun une ligne `documents` (jusqu'à 3 rectos par session en base).
 
 Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux minutes pour l'identité.
 
@@ -466,6 +477,20 @@ Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux min
 - La voix (option d'Idswyft) n'est pas proposée par la page ; une session qui l'exigerait finirait abandonnée.
 - Pas de page « Comment vos données sont utilisées » : le lien de la maquette 03 attend son texte.
 - Les sessions `parcours: age` créées par l'API restent sur la page d'Idswyft.
+- Mesures d'abandon : les durées sont prises à l'arrivée des photos au serveur, lecture comprise (l'écart
+  « verso » contient la lecture du recto). L'ouverture de la page n'est connue que pour l'identité et le
+  passe ; pour les vérifications d'âge des sites (page d'Idswyft), « page ouverte » reste inconnu. Les
+  sessions créées avant la migration ne sont pas comptées. Si l'écriture de la ligne échoue après la
+  marque, la session est perdue pour la mesure (erreur journalisée). Le relevé n'existe qu'en JSON : pas
+  encore d'écran dans la console (lot 4). La route n'a été essayée sur la pile que sans jeton (refus) ; le
+  calcul du relevé l'a été directement dans le conteneur.
+- Mesures d'abandon, lien résiduel : aucune ligne ne porte d'identifiant, mais l'ordre d'écriture reste dans
+  la base. Qui lit la base brute peut rapprocher la ligne d'une session supprimée par le site (écrite au
+  moment de la pierre tombale). Atténué pour le passage horaire (lot mélangé, marque au jour seulement).
+- Une session est comptée « supprimée » avant que la suppression soit confirmée : si elle échoue (503) et
+  que la session va au bout, elle reste comptée « supprimée ».
+- Moteur froid : le premier recto après un long repos a dépassé 60 s (504 de nginx, nouvel essai du
+  serveur, réponse en 83 s) ; le suivant, 10 s. À regarder avec l'essai sur appareils réels.
 
 ## Lot 4 — Espace client, administration, facturation à l'usage
 

@@ -11,6 +11,7 @@ import { logger } from '@/utils/logger.js';
 import { DataRetentionService } from '@/services/dataRetention.js';
 import { ProviderMetricsService } from '@/services/providerMetrics.js';
 import { estAdminPlateforme, sessionsV1 } from '@/v1/photos.js';
+import { releve } from '@/v1/mesures.js';
 import {
   getConversionFunnel,
   getGateRejectionBreakdown,
@@ -607,6 +608,17 @@ router.get('/analytics',
     const analytics = await getAnalytics(period, developerId);
 
     res.json(analytics);
+  })
+);
+
+// Preuvid : abandons et durées par étape des parcours v1, sans donnée personnelle (v1/mesures.ts).
+// Administrateurs de la plateforme seulement ; jours inclus, 30 derniers jours par défaut.
+router.get('/preuvid/mesures',
+  authenticateJWT as any,
+  requireAdminRole(['admin']) as any,
+  catchAsync(async (req: Request, res: Response) => {
+    const jour = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    res.json(await releve(jour(req.query.du), jour(req.query.au)));
   })
 );
 
