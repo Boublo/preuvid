@@ -1,0 +1,37 @@
+# Essai de bout en bout du lot 2 (voir site-test.mjs). À superposer au compose principal :
+#
+#   docker compose -f docker-compose.yml -f preuvid/e2e/compose.e2e.yml build api
+#   docker compose -f docker-compose.yml -f preuvid/e2e/compose.e2e.yml up -d api
+#   docker compose -f docker-compose.yml -f preuvid/e2e/compose.e2e.yml run --rm site-test
+#
+# Le site de test tourne dans l'image de l'API (Node, pg et le chiffrement partagé y sont déjà) et
+# s'inscrit directement en base : compte développeur, clé de test, webhook. Il n'est sur le réseau
+# interne que le temps de l'essai. L'API n'accepte de livrer un webhook à un hôte interne que s'il est
+# nommé dans PREUVID_WEBHOOK_HOTES_INTERNES : ici, uniquement « site-test ».
+
+services:
+  api:
+    environment:
+      PREUVID_WEBHOOK_HOTES_INTERNES: site-test
+
+  site-test:
+    image: preuvid/api:local
+    pull_policy: never
+    profiles: [e2e]
+    hostname: site-test
+    networks:
+      interne:
+        aliases: [site-test]
+    depends_on:
+      api:
+        condition: service_healthy
+    working_dir: /app/backend
+    entrypoint: ["node", "/app/backend/e2e/site-test.mjs"]
+    environment:
+      API_URL: http://api:3001
+      DATABASE_URL: postgresql://${DB_USER:-idswyft}:${DB_PASSWORD:?DB_PASSWORD manquant}@postgres:5432/${DB_NAME:-idswyft}
+      API_KEY_SECRET: ${API_KEY_SECRET:?API_KEY_SECRET manquant}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY manquant}
+    volumes:
+      - ./preuvid/e2e:/app/backend/e2e:ro
+      - ./preuvid/banc/img:/img:ro

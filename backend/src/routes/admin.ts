@@ -466,6 +466,10 @@ router.put('/verification/:id/review',
       message: `Verification ${decision === 'override' ? 'overridden to ' + new_status : decision + 'd'} successfully`,
     });
 
+    // Preuvid : événement v1 session.revue (ne fait rien si ce n'est pas une session v1).
+    void import('../v1/sessions.js').then(m => m.notifierFinV1(id, 'revue'))
+      .catch(err => logger.warn('v1: session.revue non émis', { error: err instanceof Error ? err.message : String(err) }));
+
     // ── Webhook forwarding (after response is sent) ──────────────
     // Fire webhook using the developer's scoped API key so downstream
     // systems are notified of the manual review decision.

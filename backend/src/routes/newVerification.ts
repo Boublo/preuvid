@@ -48,6 +48,7 @@ import { analyzeGeoRisk, routingGeoFlags } from '@/services/geoAnalysis.js';
 import { recordApplicantIp } from '@/services/applicantIp.js';
 import { broadcastStatusChange } from '@/services/realtime.js';
 import { saveSessionState, loadSessionState } from '@/services/sessionPersistence.js';
+import { notifierFinV1 } from '@/v1/sessions.js';
 
 import { VerificationSession } from '@/verification/session/VerificationSession.js';
 import type { SessionDeps, SessionHydration, AgeVerificationResult } from '@/verification/session/VerificationSession.js';
@@ -688,6 +689,9 @@ async function fireWebhooksIfTerminal(
   apiKeyId?: string
 ): Promise<void> {
   if (mapped.final_result === null) return; // not terminal yet
+
+  // Preuvid : événement v1 (ne fait rien si ce n'est pas une session v1).
+  void notifierFinV1(verificationId, 'parcours');
 
   // Map terminal result to webhook event type
   const eventType = mapped.final_result === 'verified' ? 'verification.completed'

@@ -54,7 +54,7 @@ function encryptWebhookSecret(plaintext: string): string {
 }
 
 /** Decrypt a webhook secret_token read from the DB. Returns null on failure. */
-function decryptWebhookSecret(ciphertext: string): string | null {
+export function decryptWebhookSecret(ciphertext: string): string | null {
   try {
     return decryptSecret(ciphertext, config.encryptionKey);
   } catch {
