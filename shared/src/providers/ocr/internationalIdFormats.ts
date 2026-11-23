@@ -257,12 +257,17 @@ export const INTERNATIONAL_ID_FORMATS: Record<string, CountryIdFormat> = {
     document_types: [
       {
         type: 'national_id', // Carte nationale d'identite (CNI)
-        id_number_regex: /^\d{12}$/,
+        // 12 chiffres (carte de 1995) ou 9 caract\u00e8res (carte de 2021).
+        id_number_regex: /^(?:\d{12}|[A-Z0-9]{9})$/,
         field_labels: {
-          name: [/nom/i, /pr\u00e9nom/i, /name/i, /pr\u00e9noms/i],
-          date_of_birth: [/date\s*de\s*naissance/i, /n\u00e9\s*le/i, /date\s*of\s*birth/i],
-          expiry_date: [/date\s*d'expiration/i, /valable\s*jusqu/i, /expiry/i],
-          id_number: [/n\u00b0\s*carte/i, /num\u00e9ro/i, /carte\s*nationale/i, /id\s*no/i],
+          // Preuvid : \u00ab Surname \u00bb et \u00ab Given names \u00bb s\u00e9parent le nom et les pr\u00e9noms des libell\u00e9s
+          // bilingues (\u00ab NOM / Surname \u00bb, \u00ab Pr\u00e9noms / Given names \u00bb). Sans eux, seul le premier libell\u00e9
+          // \u00ab nom \u00bb \u00e9tait lu : le recto de la CNI 2021 donnait le nom sans les pr\u00e9noms.
+          name: [/surname/i, /given\s*names?/i, /nom/i, /pr\u00e9nom/i, /name/i, /pr\u00e9noms/i],
+          // \u00ab DATE DE NAISS. \u00bb, \u00ab DATE D'EXPIR. \u00bb, \u00ab N\u00b0 du document \u00bb : libell\u00e9s du recto de 2021.
+          date_of_birth: [/date\s*de\s*naissance/i, /date\s*de\s*naiss/i, /n\u00e9\s*le/i, /date\s*of\s*birth/i],
+          expiry_date: [/date\s*d'expiration/i, /date\s*d['\u2019]?\s*expir/i, /valable\s*jusqu/i, /expiry/i],
+          id_number: [/n\u00b0\s*carte/i, /n\u00b0\s*du\s*document/i, /document\s*no/i, /num\u00e9ro/i, /carte\s*nationale/i, /id\s*no/i],
           nationality: [/nationalit\u00e9/i, /nationality/i],
           address: [/adresse/i, /domicile/i, /address/i],
           issuing_authority: [/d\u00e9livr\u00e9\s*par/i, /autorit\u00e9/i, /authority/i],

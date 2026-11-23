@@ -470,9 +470,19 @@ Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux min
   une autre pièce posée à plat ont aussi des bords nets, et le bouton manuel n'a aucun contrôle : les
   essais couvrent ces cas.
 - Recto puis verso d'une CNI parcouru avec une fausse caméra : prise du recto, lecture, écran du verso,
-  prise du verso. Le banc n'a pas de recto de CNI 2021 : l'essai associe le recto d'une ancienne CNI au
-  verso d'une CNI 2021 d'une autre personne, d'où un refus attendu (`BACK_MRZ_BARCODE_MISMATCH`). Une
-  réussite recto-verso cohérente reste à faire.
+  prise du verso. Le banc n'avait pas de recto de CNI 2021 : l'essai associait le recto d'une ancienne CNI
+  au verso d'une CNI 2021 d'une autre personne, d'où un refus attendu (`BACK_MRZ_BARCODE_MISMATCH`).
+- Recto de la CNI 2021 (23/11/2026) : ajouté au banc (72 images, série `extension`, mêmes identités que
+  les versos ; mise en page d'après le spécimen public, de mémoire, jamais comparée au spécimen officiel).
+  Lecture corrigée dans le moteur : libellés « Surname », « Given names », « DATE DE NAISS. »,
+  « DATE D'EXPIR. », « N° du document », dates « JJ MM AAAA » séparées par des espaces (indication DMY
+  seulement), virgules entre les prénoms. Banc : recto TOUT 0 % → 72 % (propre, reflet, rotation,
+  perspective, doigt, JPEG fort : 100 % ; flou et basse résolution : 0 %, prénoms mal lus ; sombre : 50 %).
+  Socle inchangé au chiffre près (95 / 95 / 94 / 97 %). Faux sûrs : la nouvelle série en montrait 2
+  (numéro lu « O » pour « 0 » à 0,96) ; un recto sans MRZ n'est plus jamais présenté comme sûr champ par
+  champ (plafond 0,9, après le calcul de `ocr_confidence`, qui ne change pas) : 0 faux sûr.
+  Pas fait : l'essai recto puis verso sur la pile, et tout essai sur une vraie carte. Une confusion O/0
+  au recto ne donne que 0,5 au numéro dans la validation croisée d'Idswyft (champ critique).
 - Le suivi de la lecture ne s'arrête plus sur une erreur réseau passagère : il attend et relit l'état.
 - La voix (option d'Idswyft) n'est pas proposée par la page ; une session qui l'exigerait finirait abandonnée.
 - Pas de page « Comment vos données sont utilisées » : le lien de la maquette 03 attend son texte.
