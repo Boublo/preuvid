@@ -212,3 +212,19 @@ export function mergeMrzIntoOcr(ocrData: OCRData, reading: MrzReading): MergedFi
 
   return merged;
 }
+
+/**
+ * Recto sans MRZ (CNI 2021, permis, pièces étrangères) : aucune clé de contrôle ne vérifie la zone
+ * imprimée, donc aucun champ d'identité n'est présenté comme sûr, quelle que soit la confiance de
+ * l'OCR (le banc a vu « 4LPARDOAP » pour « 4LPARD0AP » à 0,96). La vérification vient du verso.
+ */
+export const UNCHECKED_CONFIDENCE = 0.9;
+const IDENTITY_FIELDS = ['document_number', 'name', 'last_name', 'first_name', 'date_of_birth', 'expiration_date', 'nationality', 'sex'];
+
+export function capUncheckedConfidences(ocrData: OCRData): void {
+  const scores = ocrData.confidence_scores;
+  if (!scores) return;
+  for (const key of IDENTITY_FIELDS) {
+    if (typeof scores[key] === 'number') scores[key] = Math.min(scores[key], UNCHECKED_CONFIDENCE);
+  }
+}

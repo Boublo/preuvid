@@ -86,12 +86,14 @@ describe('safeDecode', () => {
 type ChainResult = { data: any; error?: any };
 
 /** Build a thenable supabase query-builder stub that resolves to `result`. */
-function makeChain(result: ChainResult) {
+function makeChain(result: ChainResult, inResult: ChainResult = { data: [], error: null }) {
   const chain: any = {
     select: () => chain,
     eq: () => chain,
     limit: () => chain,
     maybeSingle: async () => result,
+    // Preuvid : repérage des sessions v1 (v1/photos.ts), select('id, v1_parcours').in('id', ids).
+    in: async () => inResult,
   };
   return chain;
 }
@@ -99,9 +101,11 @@ function makeChain(result: ChainResult) {
 function mockOwnership({
   documentDeveloperId,
   selfieDeveloperId,
+  v1Parcours = null,
 }: {
   documentDeveloperId?: string | null;
   selfieDeveloperId?: string | null;
+  v1Parcours?: string | null;
 }) {
   mockSupabase.from.mockImplementation((table: string) => {
     if (table === 'documents') {
@@ -117,7 +121,10 @@ function mockOwnership({
     if (table === 'verification_requests') {
       // Only one of documentDeveloperId/selfieDeveloperId should be set per test.
       const developerId = documentDeveloperId ?? selfieDeveloperId ?? null;
-      return makeChain({ data: developerId ? { developer_id: developerId } : null });
+      return makeChain(
+        { data: developerId ? { developer_id: developerId } : null },
+        { data: [{ id: 'vr-1', v1_parcours: v1Parcours }, { id: 'vr-2', v1_parcours: v1Parcours }], error: null },
+      );
     }
     throw new Error(`Unexpected table in test: ${table}`);
   });
@@ -200,6 +207,27 @@ describe('serveLocalFile — cross-tenant ownership check', () => {
     await serveLocalFile(req, res);
 
     expect(res.statusCode).toBe(403);
+  });
+
+  it('Preuvid : refuse au site propriétaire les photos d’une session v1', async () => {
+    mockOwnership({ documentDeveloperId: 'dev-A', v1Parcours: 'identite' });
+    const res = makeRes();
+    await serveLocalFile({ params: { 0: 'documents/file.jpg' }, developer: { id: 'dev-A' } } as any, res);
+    expect(res.statusCode).toBe(403);
+    expect(res.sentFile).toBeNull();
+
+    mockOwnership({ selfieDeveloperId: 'dev-A', v1Parcours: 'identite' });
+    const res2 = makeRes();
+    await serveLocalFile({ params: { 0: 'selfies/file.jpg' }, reviewer: { developer_id: 'dev-A' } } as any, res2);
+    expect(res2.statusCode).toBe(403);
+  });
+
+  it('Preuvid : un administrateur de la plateforme voit les photos d’une session v1', async () => {
+    mockOwnership({ documentDeveloperId: 'dev-A', v1Parcours: 'identite' });
+    const res = makeRes();
+    await serveLocalFile({ params: { 0: 'documents/file.jpg' }, user: { id: 'admin-1' } } as any, res);
+    expect(res.statusCode).toBeNull();
+    expect(res.sentFile).toBeTruthy();
   });
 
   it('lets platform admins (req.user) bypass the ownership check', async () => {

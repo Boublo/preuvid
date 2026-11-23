@@ -94,3 +94,15 @@ describe('mergeMrzIntoOcr', () => {
     expect(ocr.full_name).toBe('WEI CHEN');
   });
 });
+
+describe('recto sans MRZ', () => {
+  it('aucun champ d’identité n’est présenté comme sûr ; les autres champs ne changent pas', async () => {
+    const { capUncheckedConfidences, SURE_CONFIDENCE } = await import('./mrzMerge.js');
+    const ocr: any = { document_number: '4LPARDOAP', confidence_scores: { document_number: 0.96, date_of_birth: 0.99, name: 0.5, address: 0.98 } };
+    capUncheckedConfidences(ocr);
+    expect(ocr.confidence_scores.document_number).toBeLessThan(SURE_CONFIDENCE);
+    expect(ocr.confidence_scores.date_of_birth).toBeLessThan(SURE_CONFIDENCE);
+    expect(ocr.confidence_scores.name).toBe(0.5);
+    expect(ocr.confidence_scores.address).toBe(0.98);
+  });
+});

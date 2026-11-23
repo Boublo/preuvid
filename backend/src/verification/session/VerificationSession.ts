@@ -56,7 +56,21 @@ export interface StepResult {
   rejection_reason: string | null;
   rejection_detail: string | null;
   user_message: string | null;
+  /** Preuvid : photo illisible, la session revient à la même étape au lieu d'être refusée. */
+  a_reprendre?: boolean;
 }
+
+/** Preuvid : échecs de photo par côté de la pièce (persistés avec l'état de la session). */
+export interface EssaisPhoto { recto: number; verso: number }
+
+/**
+ * Preuvid : raisons qui tiennent à la photo (pièce illisible), pas à la pièce elle-même. Les signaux de
+ * fraude (chiffre de contrôle faux que le recto confirme, recto et verso qui ne concordent pas, contrôles
+ * croisés) restent des refus immédiats.
+ */
+export const RAISONS_PHOTO_A_REPRENDRE: ReadonlySet<string> = new Set([
+  'FRONT_OCR_FAILED', 'FRONT_LOW_CONFIDENCE', 'BACK_BARCODE_NOT_FOUND', 'BACK_MRZ_UNREADABLE',
+]);
 
 /** Age verification result — never exposes actual DOB */
 export interface AgeVerificationResult {
@@ -106,14 +120,17 @@ export interface SessionHydration {
   velocity_analysis?: VelocityAnalysisResult | null;
   geo_analysis?: GeoAnalysisResult | null;
   voice_match?: VoiceMatchResult | null;
+  essais_photo?: EssaisPhoto | null;
   created_at?: string;
   completed_at?: string | null;
 }
 
 export class VerificationSession {
-  private state: SessionState;
+  private state: SessionState & { essais_photo?: EssaisPhoto };
   private deps: SessionDeps;
   private flow: FlowConfig;
+  /** Preuvid : nombre de photos illisibles admises par côté avant le refus. 1 = comportement d'Idswyft. */
+  private essaisPhotoMax = 1;
 
   constructor(deps: SessionDeps, hydration?: SessionHydration, flow?: FlowConfig) {
     this.deps = deps;
@@ -139,7 +156,13 @@ export class VerificationSession {
       created_at: hydration?.created_at ?? now,
       updated_at: now,
       completed_at: hydration?.completed_at ?? null,
+      ...(hydration?.essais_photo ? { essais_photo: { ...hydration.essais_photo } } : {}),
     };
+  }
+
+  /** Preuvid : admet jusqu'à `n` photos illisibles par côté (la dernière refuse la session). */
+  autoriserEssaisPhoto(n: number): void {
+    this.essaisPhotoMax = Math.max(1, Math.floor(n));
   }
 
   /** Read current state — safe to call at any time */
@@ -164,7 +187,7 @@ export class VerificationSession {
     const gate = evaluateGate1(frontResult);
 
     if (!gate.passed) {
-      return this.hardReject(gate);
+      return this.reprendreOuRefuser(gate, 'recto', VerificationStatus.AWAITING_FRONT);
     }
 
     this.state.front_extraction = frontResult;
@@ -195,7 +218,7 @@ export class VerificationSession {
     const gate = evaluateGate1(frontResult);
 
     if (!gate.passed) {
-      return this.hardReject(gate);
+      return this.reprendreOuRefuser(gate, 'recto', VerificationStatus.AWAITING_FRONT);
     }
 
     this.state.front_extraction = frontResult;
@@ -249,8 +272,12 @@ export class VerificationSession {
       };
     }
 
-    this.transition(VerificationStatus.COMPLETE);
-    this.state.completed_at = new Date().toISOString();
+    // Preuvid : l'étape suivante vient du parcours (COMPLETE pour age_only ; AWAITING_LIVE pour le passe
+    // majeur, qui exige ensuite le visage, voir v1/age/visage.ts).
+    this.transition(this.flow.afterFront as VerificationStatusType);
+    if (this.state.current_step === VerificationStatus.COMPLETE) {
+      this.state.completed_at = new Date().toISOString();
+    }
     return {
       ...this.passResult(),
       age_verification: ageVerification,
@@ -270,7 +297,7 @@ export class VerificationSession {
     const gate2 = evaluateGate2(backResult, this.state.front_extraction!, this.state.issuing_country);
 
     if (!gate2.passed) {
-      return this.hardReject(gate2);
+      return this.reprendreOuRefuser(gate2, 'verso', VerificationStatus.AWAITING_BACK);
     }
 
     this.state.back_extraction = backResult;
@@ -355,6 +382,17 @@ export class VerificationSession {
       );
     }
     this.state.face_match = faceMatchResult;
+
+    // Preuvid, passe majeur : sans comparaison possible, pas de revue manuelle (personne ne la ferait, et
+    // les images resteraient) : refus, et la personne recommence avec une meilleure photo.
+    if (this.flow.preset === 'age_only' && faceMatchResult.skipped_reason) {
+      return this.hardReject({
+        passed: false,
+        rejection_reason: 'FACE_NOT_DETECTED',
+        rejection_detail: faceMatchResult.skipped_reason,
+        user_message: 'Le visage n’a pas pu être comparé à la photo de la pièce.',
+      } as GateResult);
+    }
 
     const gate5 = evaluateGate5(faceMatchResult);
     if (!gate5.passed) {
@@ -452,6 +490,27 @@ export class VerificationSession {
   private transition(step: VerificationStatusType): void {
     this.state.current_step = step;
     this.state.updated_at = new Date().toISOString();
+  }
+
+  /**
+   * Preuvid : photo illisible avec des essais restants → retour à l'étape de la photo, sans motif de refus
+   * enregistré ; sinon refus comme Idswyft.
+   */
+  private reprendreOuRefuser(gate: GateResult, cote: keyof EssaisPhoto, etape: VerificationStatusType): StepResult {
+    const essais: EssaisPhoto = { recto: 0, verso: 0, ...this.state.essais_photo };
+    essais[cote] += 1;
+    this.state.essais_photo = essais;
+    if (essais[cote] < this.essaisPhotoMax && RAISONS_PHOTO_A_REPRENDRE.has(gate.rejection_reason ?? '')) {
+      this.transition(etape);
+      return {
+        passed: false,
+        rejection_reason: gate.rejection_reason,
+        rejection_detail: gate.rejection_detail,
+        user_message: gate.user_message,
+        a_reprendre: true,
+      };
+    }
+    return this.hardReject(gate);
   }
 
   /** Handle a gate failure — transition to HARD_REJECTED */

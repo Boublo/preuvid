@@ -1,14 +1,53 @@
 # Preuvid
 
-Vérification d'identité et d'âge pour les plateformes françaises. Dépôt privé, en cours de construction.
+Vérification d'identité et d'âge pour les plateformes françaises (pièces françaises, vérification d'âge
+en double anonymat), construite sur [Idswyft Community](https://github.com/team-idswyft/idswyft-community)
+v1.12.39.
 
-- Feuille de route : [`ROADMAP.md`](ROADMAP.md)
-- Consignes de développement : [`CLAUDE.md`](CLAUDE.md)
-- Documentation, banc de mesure, maquettes : [`preuvid/`](preuvid/)
+## Projet abandonné, libre de reprise
 
-Ce dépôt est un fork d'[Idswyft Community](https://github.com/team-idswyft/idswyft-community) v1.12.39,
-sous licence MIT (voir `LICENSE`). Le nom et les marques Idswyft appartiennent à leurs titulaires
-(voir `TRADEMARK.md`) et ne sont pas utilisés par Preuvid. Le fichier d'origine suit.
+Son auteur a arrêté le projet le 23/11/2026 et le laisse à qui veut le reprendre, sous licence MIT
+(`LICENSE`). Il n'est plus maintenu : pas de correctif, pas de réponse garantie aux tickets.
+
+**Ce n'est pas un produit prêt à l'emploi.** Avant tout usage avec de vraies personnes :
+
+- rien n'a été audité : ni la sécurité, ni la protection des données, ni l'application du référentiel
+  de l'Arcom sur la vérification d'âge. Le code est conçu selon ce référentiel, mais aucun audit
+  indépendant n'a établi qu'il le respecte ;
+- la lecture des pièces n'est mesurée que sur des images **synthétiques** (`preuvid/banc/`), jamais
+  sur de vraies cartes ; le recto de la CNI 2021 suit le spécimen public de mémoire ;
+- la détection du vivant et la comparaison des visages n'ont jamais été mesurées sur de vrais visages
+  (faux refus, photo ou vidéo rejouée, biais) ;
+- les emplacements entre crochets (`[PRIX]`, `[DÉLAI]`, raison sociale, adresse) n'ont jamais été remplis.
+
+## Où en est le projet
+
+Le détail, lot par lot, avec les scores du banc et les écarts, est dans [`ROADMAP.md`](ROADMAP.md).
+
+- Lot 0, socle : pile Docker hors ligne, modèles figés dans l'image, banc de mesure conteneurisé.
+- Lot 1, lecture : CNI 2021, ancienne CNI, passeport, titre de séjour, permis ; MRZ et clés de contrôle,
+  aucun champ faux présenté comme sûr sur le banc.
+- Lot 2, API v1 : sessions, webhooks signés, idempotence.
+- Lot 3, **inachevé** : parcours identité sur mobile (`/verifier`), passe majeur et double anonymat
+  (`/age`, `preuvid/sdk/age`), essais de photo, mesure des abandons, recto de la CNI 2021.
+  Manquent : l'essai sur iPhone et Android réels (VoiceOver, TalkBack compris) et l'essai recto puis
+  verso sur la pile ; la détection du vivant n'offre aucune autre voie à qui ne peut pas tourner la tête.
+- Lots 4 et suivants : jamais commencés.
+
+## Démarrer
+
+```bash
+cp .env.community .env          # puis remplir les secrets (openssl rand -hex 32)
+docker compose build && docker compose pull --ignore-buildable
+docker compose up -d            # http://localhost:8088
+python3 preuvid/banc/banc.py    # banc de lecture, scores dans preuvid/banc/scores/
+```
+
+Documentation : [`preuvid/docs/`](preuvid/docs/) (architecture, sécurité, API, vérification d'âge,
+double anonymat, étude NFC). `CLAUDE.md` contient les règles de travail suivies pendant le projet.
+
+Le nom et les marques Idswyft appartiennent à leurs titulaires (voir `TRADEMARK.md`). Une bonne façon
+de faire vivre ce travail est aussi de le proposer à Idswyft. Le fichier d'origine d'Idswyft suit.
 
 ---
 

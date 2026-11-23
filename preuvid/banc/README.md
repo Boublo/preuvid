@@ -7,7 +7,7 @@ Images **synthétiques**, identités **fictives** : aucune donnée de vraie pers
 
 | Fichier | Rôle |
 |---|---|
-| `gen.py` | Génère 360 images et `truth.json` (vérité terrain) : le socle de 192 (8 identités × 3 documents × 8 conditions), puis l'extension du lot 1 (168) |
+| `gen.py` | Génère 432 images et `truth.json` (vérité terrain) : le socle de 192 (8 identités × 3 documents × 8 conditions), l'extension du lot 1 (168), puis le recto de la CNI 2021 (72, lot 3) |
 | `run.py` | Envoie chaque image au moteur (`http://127.0.0.1:3002/extract/front` ou `/back`) et écrit `results.jsonl` |
 | `score.py` | Compare `results.jsonl` à `truth.json`, affiche les scores par document et par condition, et liste les champs faux rendus avec une confiance ≥ 0,95 (« faux sûrs », doit rester vide) |
 | `mrz-fr.mjs` | Vérifie que la bibliothèque `mrz` décode les trois formats français (spécimens publics) |
@@ -31,13 +31,21 @@ puis le titre de séjour (TD1 « IR », 3×30, nationalités étrangères) et le
 sur l'image du recto, sous les rubriques numérotées. Les identités de l'extension sont tirées d'une graine
 à part : les 192 images du socle restent identiques à l'octet.
 
+Recto de la CNI 2021 (lot 3), noté à part lui aussi (ligne `cni2021_recto`, série `extension`) : les mêmes
+identités et numéros que les versos du socle, dans les neuf conditions, envoyés à `/extract/front` seulement.
+Chaque ligne de `truth.json` donne le verso correspondant (`verso`), pour un essai recto puis verso sur la
+pile. Le recto n'a pas de MRZ : la colonne MRZ affiche « — ». La mise en page (libellés bilingues en
+capitales, dates « JJ MM AAAA » séparées par des espaces, numéro de 9 caractères en haut à droite,
+numéro CAN de 6 chiffres en bas) suit le spécimen public de mémoire : à vérifier sur le spécimen officiel.
+Les 360 images précédentes restent identiques à l'octet (graine à part).
+
 ## Lancer
 
 Une seule commande, depuis la racine du dépôt (Docker et Python 3 suffisent sur l'hôte) :
 
 ```bash
 docker compose build engine        # si l'image du moteur n'est pas à jour
-python3 preuvid/banc/banc.py       # ~15 min sur 2 cœurs (256 appels)
+python3 preuvid/banc/banc.py       # ~50 min sur 2 cœurs (504 appels)
 ```
 
 `banc.py` construit l'image du banc (`Dockerfile` : Python, Pillow, OpenCV, NumPy et polices DejaVu

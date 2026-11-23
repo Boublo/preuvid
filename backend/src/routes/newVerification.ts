@@ -48,7 +48,9 @@ import { analyzeGeoRisk, routingGeoFlags } from '@/services/geoAnalysis.js';
 import { recordApplicantIp } from '@/services/applicantIp.js';
 import { broadcastStatusChange } from '@/services/realtime.js';
 import { saveSessionState, loadSessionState } from '@/services/sessionPersistence.js';
-import { notifierFinV1 } from '@/v1/sessions.js';
+import { notifierFinV1, effacerImagesAge } from '@/v1/sessions.js';
+import { avecVisage, fluxAge } from '@/v1/age/visage.js';
+import { estSessionV1, essaisPhoto } from '@/v1/photos.js';
 
 import { VerificationSession } from '@/verification/session/VerificationSession.js';
 import type { SessionDeps, SessionHydration, AgeVerificationResult } from '@/verification/session/VerificationSession.js';
@@ -159,6 +161,7 @@ async function hydrateSession(verificationId: string, isSandbox: boolean, develo
     velocity_analysis: (savedState as any).velocity_analysis ?? null,
     geo_analysis: (savedState as any).geo_analysis ?? null,
     voice_match: (savedState as any).voice_match ?? null,
+    essais_photo: (savedState as any).essais_photo ?? null,
     created_at: savedState.created_at,
     completed_at: savedState.completed_at,
   } : {
@@ -170,7 +173,7 @@ async function hydrateSession(verificationId: string, isSandbox: boolean, develo
   let resolvedDeveloperId = developerId;
   const { data: row, error: rowError } = await supabase
     .from('verification_requests')
-    .select('developer_id, verification_mode, issuing_country')
+    .select('developer_id, verification_mode, issuing_country, addons')
     .eq('id', verificationId)
     .single();
   if (rowError) {
@@ -207,6 +210,9 @@ async function hydrateSession(verificationId: string, isSandbox: boolean, develo
   // Resolve flow config from verification_mode
   const mode = (row?.verification_mode as VerificationMode) || 'full';
   let flow = FLOW_PRESETS[mode] ?? INLINE_FLOW_FALLBACKS[mode] ?? FLOW_PRESETS.full;
+  // Preuvid, passe majeur : visage après l'âge, et jamais de criblage AML (il garderait nom et date de naissance).
+  flow = fluxAge(flow, row?.addons);
+  if (avecVisage(row?.addons)) addons = { aml_screening: false };
 
   // Passports are single-sided — dynamically skip back step on re-hydration
   flow = applyPassportOverride(flow, savedState?.front_extraction?.ocr?.detected_document_type as string | undefined);
@@ -692,6 +698,8 @@ async function fireWebhooksIfTerminal(
 
   // Preuvid : événement v1 (ne fait rien si ce n'est pas une session v1).
   void notifierFinV1(verificationId, 'parcours');
+  // Preuvid : parcours âge, aucune image après la réponse (sauf revue manuelle en attente).
+  if (mapped.final_result !== 'manual_review') void effacerImagesAge(verificationId);
 
   // Map terminal result to webhook event type
   const eventType = mapped.final_result === 'verified' ? 'verification.completed'
@@ -1287,7 +1295,7 @@ router.post('/:verification_id/front-document',
       .eq('id', verification_id)
       .single();
     const vrMode = (vrRow?.verification_mode as VerificationMode) || 'full';
-    const flow = FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full;
+    const flow = fluxAge(FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full, vrRow?.addons);
     const isAgeOnly = vrMode === 'age_only';
     const ageThreshold = vrRow?.age_threshold ?? 18;
     const complianceForceReview = (vrRow?.addons as any)?.compliance_force_manual_review === true;
@@ -1313,6 +1321,8 @@ router.post('/:verification_id/front-document',
 
     // Override the extractFront dep to return our pre-computed result
     (session as any).deps.extractFront = async () => frontResult;
+    // Preuvid : parcours identité v1, quelques photos illisibles admises avant le refus.
+    session.autoriserEssaisPhoto(await essaisPhoto(verification_id));
 
     let stepResult;
     let ageVerification: AgeVerificationResult | undefined;
@@ -1333,7 +1343,8 @@ router.post('/:verification_id/front-document',
     let dedupFlags: DuplicateFlag[] = [];
     let dedupBlocked = false;
     let dedupAction: string | null = null;
-    if (stepResult.passed && !isSandbox) {
+    // Preuvid, passe majeur : aucune empreinte du document ni du visage n'est gardée.
+    if (stepResult.passed && !isSandbox && !avecVisage(vrRow?.addons)) {
       try {
         const dedupSettings = await getDedupSettings(developerId);
         dedupAction = dedupSettings.action;
@@ -1368,8 +1379,12 @@ router.post('/:verification_id/front-document',
     let dbStatus: string;
     if (dedupBlocked) {
       dbStatus = 'failed';
+    } else if (stepResult.a_reprendre) {
+      dbStatus = 'processing';
     } else if (isAgeOnly) {
-      const ageResult = state.current_step === VerificationStatus.COMPLETE ? 'verified' : 'failed';
+      // Preuvid : le passe majeur attend encore le visage (AWAITING_LIVE).
+      const ageResult = state.current_step === VerificationStatus.COMPLETE ? 'verified'
+        : state.current_step === VerificationStatus.AWAITING_LIVE ? 'processing' : 'failed';
       dbStatus = (ageResult === 'verified' && (complianceForceReview || (dedupFlags.length > 0 && !dedupBlocked)))
         ? 'manual_review' : ageResult;
     } else {
@@ -1410,7 +1425,9 @@ router.post('/:verification_id/front-document',
       : !stepResult.passed
         ? stepResult.user_message || 'Front document processing failed'
         : isAgeOnly
-          ? (state.current_step === VerificationStatus.COMPLETE ? 'Age verification passed' : stepResult.user_message || 'Age verification failed')
+          ? (state.current_step === VerificationStatus.COMPLETE ? 'Age verification passed'
+            : state.current_step === VerificationStatus.AWAITING_LIVE ? 'Age verified - ready for live capture'
+            : stepResult.user_message || 'Age verification failed')
           : state.current_step === VerificationStatus.AWAITING_LIVE
             ? 'Front document processed successfully - ready for live capture'
             : state.current_step === VerificationStatus.COMPLETE
@@ -1580,6 +1597,7 @@ router.post('/:verification_id/back-document',
     }
 
     (session as any).deps.extractBack = async () => backResult;
+    session.autoriserEssaisPhoto(await essaisPhoto(verification_id));
     const stepResult = await session.submitBack(req.file.buffer);
     await saveSessionState(verification_id, session.getState());
     recordStepTimestamp(verification_id, 'back'); // fire-and-forget
@@ -1600,7 +1618,7 @@ router.post('/:verification_id/back-document',
         processing_completed_at: new Date().toISOString(),
       } as any);
     } else {
-      dbStatus = stepResult.passed ? 'processing' : 'failed';
+      dbStatus = stepResult.passed || stepResult.a_reprendre ? 'processing' : 'failed';
       await verificationService.updateVerificationRequest(verification_id, {
         status: dbStatus,
       } as any);
@@ -1733,8 +1751,12 @@ router.post('/:verification_id/live-capture',
       .eq('id', verification_id)
       .single();
     const vrMode = (vrRow?.verification_mode as VerificationMode) || 'full';
-    const flow = FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full;
+    const flow = fluxAge(FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full, vrRow?.addons);
     const complianceForceReview = (vrRow?.addons as any)?.compliance_force_manual_review === true;
+    // Preuvid, passe majeur : ni vitesse, ni géolocalisation, ni doublons. Ces contrôles envoient en revue
+    // manuelle (personne ne la ferait, la page dirait « refusé ») des adultes qui partagent une adresse IP
+    // d'opérateur mobile, et les doublons garderaient une empreinte du visage.
+    const passeVisage = avecVisage(vrRow?.addons);
 
     if (!flow.requiresLiveness) {
       return res.status(400).json({
@@ -1778,10 +1800,11 @@ router.post('/:verification_id/live-capture',
           frames: headTurnMetadata.frames.length,
         });
       } catch (err) {
+        // Preuvid : la valeur n'est pas recopiée dans l'erreur (journalisée) : elle contient les images du visage.
         throw new ValidationError(
           'Invalid liveness_metadata: expected head_turn challenge format with frames array',
           'liveness_metadata',
-          req.body.liveness_metadata,
+          undefined,
         );
       }
     }
@@ -1823,7 +1846,7 @@ router.post('/:verification_id/live-capture',
     const stepResult = await session.submitLiveCapture(req.file.buffer);
 
     // ─── Velocity + Geo Analysis (non-sandbox only) ───────────
-    if (stepResult.passed && !isSandbox) {
+    if (stepResult.passed && !isSandbox && !passeVisage) {
       try {
         const { data: vrRow } = await supabase.from('verification_requests')
           .select('client_ip, user_id, step_timestamps')
@@ -1867,7 +1890,7 @@ router.post('/:verification_id/live-capture',
     // Only run dedup if the step passed — don't store fingerprints for failed verifications
     let liveDedupFlags: DuplicateFlag[] = [];
     let liveDedupBlocked = false;
-    if (stepResult.passed && !isSandbox) {
+    if (stepResult.passed && !isSandbox && !passeVisage) {
       try {
         const liveDeveloperId = (req as any).developer.id;
         const dedupSettings = await getDedupSettings(liveDeveloperId);
@@ -2326,6 +2349,15 @@ router.post('/:verification_id/restart',
     const { verification_id } = req.params;
     const verification = await requireOwnedVerification(req, verification_id);
 
+    // Preuvid : une session v1 refusée l'est pour de bon (le site a été prévenu, les essais de photo sont
+    // comptés dans l'état que /restart effacerait) ; le site crée une nouvelle session.
+    if (await estSessionV1(verification_id).catch(() => true)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Une session Preuvid refusée ne peut pas être relancée : le site doit en créer une nouvelle.',
+      });
+    }
+
     // Only failed verifications can be restarted
     const isSandbox = (verification as any).is_sandbox || false;
     const session = await hydrateSession(verification_id, isSandbox);
@@ -2538,7 +2570,7 @@ router.get('/:verification_id/status',
       .eq('id', verification_id)
       .single();
     const vrMode = (vrMeta?.verification_mode as VerificationMode) || 'full';
-    const flow = FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full;
+    const flow = fluxAge(FLOW_PRESETS[vrMode] ?? INLINE_FLOW_FALLBACKS[vrMode] ?? FLOW_PRESETS.full, vrMeta?.addons);
 
     const session = await hydrateSession(verification_id, isSandbox);
     const state = session.getState();
@@ -2617,6 +2649,10 @@ router.get('/:verification_id/selfie',
     }
 
     const filePath = (verification as any).selfie?.file_path;
+    // Preuvid : le selfie d'une session v1 ne va jamais au site, ni par cette route (v1/photos.ts).
+    if (await estSessionV1(verification_id)) {
+      return res.status(404).json({ selfie_url: null });
+    }
     if (!filePath) {
       // Owned, but no live-capture selfie on file yet (or a mode without live capture).
       return res.status(404).json({ selfie_url: null });

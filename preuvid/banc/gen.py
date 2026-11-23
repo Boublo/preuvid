@@ -134,6 +134,38 @@ def render(kind,idt,num,lines):
     for i,l in enumerate(lines): d.text((36,my+i*(mrzsize+14)),l,font=fm,fill=(10,10,10))
     return im
 
+LIEUX=["GRENOBLE (38)","LYON 3E (69)","NANTES (44)","BREST (29)","LILLE (59)","TOULOUSE (31)","DIJON (21)","ROUEN (76)"]
+
+def render_cni2021_recto(idt,num,rng):
+    """Recto de la CNI 2021 (lot 3), sans MRZ : la même identité et le même numéro que le verso du socle
+    (`cni2021`), pour qu'un recto et son verso se correspondent. Disposition du spécimen public : numéro en
+    haut, photo à gauche, rubriques bilingues à droite, dates en « JJ MM AAAA », numéro CAN en bas."""
+    W,H=1012,638
+    bg=np.full((H,W,3),(232,238,244),np.uint8)
+    yy,xx=np.mgrid[0:H,0:W]
+    wave=(8*np.sin(xx/23.0+yy/41.0)+6*np.sin(yy/17.0)).astype(np.int16)
+    bg=np.clip(bg.astype(np.int16)+wave[...,None]+np.array([0,4,10]),0,255).astype(np.uint8)
+    im=Image.fromarray(bg); d=ImageDraw.Draw(im)
+    f=ImageFont.truetype(SANS,20); fb=ImageFont.truetype(SANSB,30); fs=ImageFont.truetype(SANS,15); fv=ImageFont.truetype(SANSB,25)
+    d.text((40,20),"RÉPUBLIQUE FRANÇAISE",font=fb,fill=(20,40,110))
+    d.text((40,60),"CARTE NATIONALE D'IDENTITÉ / IDENTITY CARD",font=f,fill=(20,40,110))
+    d.text((640,96),"N° du document / Document No",font=fs,fill=(70,70,90)); d.text((640,114),num,font=fv,fill=(15,15,20))
+    d.rectangle((40,150,290,470),fill=(205,210,216),outline=(120,120,120))  # photo (sans visage)
+    dmy=lambda iso:' '.join([iso[8:],iso[5:7],iso[:4]])
+    x0=330; y=150
+    for lab,val in (("NOM / Surname",idt['nom']),("Prénoms / Given names",idt['prenom'].replace(' ',', '))):
+        d.text((x0,y),lab,font=fs,fill=(70,70,90)); d.text((x0,y+18),val,font=fv,fill=(15,15,20)); y+=58
+    for cols in ((("SEXE / Sex",idt['sex']),("NATIONALITÉ / Nationality","FRA"),("DATE DE NAISS. / Date of birth",dmy(idt['birth_iso']))),
+                 (("LIEU DE NAISSANCE / Place of birth",rng.choice(LIEUX)),),
+                 (("DATE D'EXPIR. / Expiry date",dmy(idt['exp_iso'])),)):
+        x=x0
+        for lab,val in cols:
+            d.text((x,y),lab,font=fs,fill=(70,70,90)); d.text((x,y+18),val,font=fv,fill=(15,15,20)); x+=210 if len(cols)>1 else 0
+        y+=58
+    d.text((x0,y+4),"Signature",font=fs,fill=(70,70,90))
+    d.text((860,590),f"{rng.randint(0,999999):06d}",font=ImageFont.truetype(MONO,26),fill=(15,15,20))  # numéro CAN
+    return im
+
 def degrade(im,cond,seed):
     rng=np.random.default_rng(seed); a=cv2.cvtColor(np.array(im),cv2.COLOR_RGB2BGR); h,w=a.shape[:2]
     def onbg(a,M=None,pad=120):
@@ -185,6 +217,15 @@ if __name__=="__main__":
             a,q=degrade(im,c,i*100+50+CONDS_EXT.index(c)); fn_=f"img/{kind}_{i:02d}_{c}.jpg"
             cv2.imwrite(fn_,a,[cv2.IMWRITE_JPEG_QUALITY,q])
             truth.append(dict(file=fn_,kind=kind,cond=c,num=num,lines=lines,serie='extension',**idt))
+    # Recto de la CNI 2021 (lot 3) : mêmes identités et numéros que les versos du socle.
+    rng3=random.Random(20261121)
+    for i,kind,idt,num,lines,im in socle:
+        if kind!='cni2021': continue
+        im=render_cni2021_recto(idt,num,rng3)
+        for c in CONDS+CONDS_EXT:
+            a,q=degrade(im,c,2000+i*100+(CONDS+CONDS_EXT).index(c)); fn_=f"img/cni2021_recto_{i:02d}_{c}.jpg"
+            cv2.imwrite(fn_,a,[cv2.IMWRITE_JPEG_QUALITY,q])
+            truth.append(dict(file=fn_,kind='cni2021_recto',cond=c,num=num,lines=None,verso=f"img/cni2021_{i:02d}_{c}.jpg",serie='extension',**idt))
     rng2=random.Random(20261119)
     for i in range(n):
         idt=identity_etr(rng2)

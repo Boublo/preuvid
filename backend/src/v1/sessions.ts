@@ -21,7 +21,7 @@ import { StorageService } from '@/services/storage.js';
 import config from '@/config/index.js';
 import { saveSessionState, loadSessionState } from '@/services/sessionPersistence.js';
 import { VerificationSession } from '@/verification/session/VerificationSession.js';
-import { decisionV1, MODE_PAR_PARCOURS, statutV1, type V1Parcours, type V1Row } from './decision.js';
+import { decisionV1, lienParcours, MODE_PAR_PARCOURS, statutV1, type V1Parcours, type V1Row } from './decision.js';
 import { emettre } from './webhooks.js';
 
 const verificationService = new VerificationService();
@@ -54,6 +54,50 @@ export async function effacerFichiers(id: string): Promise<boolean> {
     }
   }
   return toutEfface;
+}
+
+/**
+ * Ôte de l'état gardé ce qui a été lu sur la pièce (champs, bande MRZ) et l'empreinte du visage : la
+ * réponse « majeur » est donnée, plus rien de la personne ne sert.
+ */
+async function effacerLecture(id: string): Promise<void> {
+  const etat = await loadSessionState(id);
+  const recto = etat?.front_extraction as Record<string, unknown> | undefined;
+  if (!etat || !recto) return;
+  for (const champ of ['ocr', 'mrz_fields', 'mrz_corrections', 'mrz_from_front', 'face_embedding', 'face_age', 'face_gender']) delete recto[champ];
+  await saveSessionState(id, etat);
+}
+
+/**
+ * Parcours âge (v1 et /api/v2) : aucune image après la réponse (preuvid/docs/securite.md, règle 1).
+ * Appelé quand la vérification a une issue définitive : validée ou refusée par le moteur, ou décidée en
+ * revue manuelle. Une vérification qui attend une revue garde son image jusqu'à la décision.
+ */
+/** Efface les photos (fichiers, puis leurs chemins). La décision et les champs lus restent. False si un fichier résiste. */
+export async function effacerPhotos(id: string): Promise<boolean> {
+  if (!(await effacerFichiers(id))) return false;
+  const [d, s] = await Promise.all([
+    supabase.from('documents').update({ file_path: null }).eq('verification_request_id', id),
+    supabase.from('selfies').update({ file_path: null, enrollment_audio_path: null }).eq('verification_request_id', id),
+  ]);
+  return !d.error && !s.error;
+}
+
+export async function effacerImagesAge(id: string): Promise<void> {
+  try {
+    const { data } = await supabase.from('verification_requests').select('verification_mode').eq('id', id).single();
+    if ((data as { verification_mode?: string } | null)?.verification_mode !== 'age_only') return;
+    if (!(await effacerPhotos(id))) {
+      logger.error('âge : images non effacées', { session: id });
+      return;
+    }
+    await effacerLecture(id);
+    logger.info('âge : images effacées après la réponse', { session: id });
+  } catch (err) {
+    logger.error('âge : effacement des images impossible', {
+      session: id, error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /** Durée de validité du lien envoyé à la personne. */
@@ -128,7 +172,7 @@ export async function creerSession(cle: CleApi, demande: CreationV1, baseParcour
     session: requete.id,
     parcours: demande.parcours,
     statut: 'en_attente' as const,
-    lien: `${baseParcours.replace(/\/$/, '')}/user-verification?session=${jeton}`,
+    lien: lienParcours(baseParcours, demande.parcours, jeton),
     expire_le: expiration.toISOString(),
     reference: demande.reference ?? null,
     retour: demande.retour ?? null,
@@ -175,6 +219,15 @@ export async function lireDecision(cle: CleApi, id: string) {
 export async function supprimerSession(cle: CleApi, id: string): Promise<'supprimee' | 'introuvable' | 'echec_fichiers' | 'echec_base'> {
   const s = await lire(cle, id);
   if (!s) return 'introuvable';
+
+  // Abandons et durées (./mesures.ts) : compter la session avant d'effacer ce qui la mesure.
+  // Import différé : mesures → parcours → sessions.
+  try {
+    const { mesurerSession } = await import('./mesures.js');
+    await mesurerSession(id, true);
+  } catch (err) {
+    logger.error('mesures : session supprimée non comptée', { error: err instanceof Error ? err.message : String(err) });
+  }
 
   const fichiersEffaces = await effacerFichiers(id);
   if (!fichiersEffaces) return 'echec_fichiers';

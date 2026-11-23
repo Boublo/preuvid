@@ -10,7 +10,7 @@ def call(route,f):
     except Exception: d={'success':False,'error':'no-json','raw':r.stdout[:200]}
     return d, round(time.time()-t,2)
 for r in truth:
-    routes=['front'] if r['kind']!='cni2021' else ['back','front']
+    routes=['front'] if r['kind']!='cni2021' else ['back','front']  # cni2021_recto : front seulement
     for route in routes:
         key=f"{r['file']}|{route}"
         if key in done: continue

@@ -24,6 +24,7 @@ export default defineConfig({
       interval: 100
     },
     proxy: {
+      '/v1': { target: 'http://localhost:3001', changeOrigin: true, secure: false },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,
@@ -33,6 +34,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // Trois pages : la console (index.html), le passe majeur (age.html) et le parcours identité
+    // (verifier.html), sans rien en commun à charger.
+    rollupOptions: { input: { main: 'index.html', age: 'age.html', verifier: 'verifier.html' } },
     sourcemap: true,
     minify: 'terser',
     chunkSizeWarningLimit: 1000,

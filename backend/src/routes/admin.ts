@@ -10,6 +10,8 @@ import { supabase } from '@/config/database.js';
 import { logger } from '@/utils/logger.js';
 import { DataRetentionService } from '@/services/dataRetention.js';
 import { ProviderMetricsService } from '@/services/providerMetrics.js';
+import { estAdminPlateforme, sessionsV1 } from '@/v1/photos.js';
+import { releve } from '@/v1/mesures.js';
 import {
   getConversionFunnel,
   getGateRejectionBreakdown,
@@ -118,13 +120,16 @@ router.get('/verifications',
       if (s.file_path && !selfieMap.has(s.verification_request_id)) selfieMap.set(s.verification_request_id, s.file_path);
     }
 
+    // Preuvid : vignettes des sessions v1 réservées aux administrateurs de la plateforme (v1/photos.ts).
+    const cachees = estAdminPlateforme(req) ? new Set<string>() : await sessionsV1(vIds);
+
     // Generate signed thumbnail URLs in parallel
     const verifications = await Promise.all(
       result.verifications.map(async (v: any) => {
         let document_thumbnail = null;
         let selfie_thumbnail = null;
-        const docPath = docMap.get(v.id);
-        const selfiePath = selfieMap.get(v.id);
+        const docPath = cachees.has(v.id) ? undefined : docMap.get(v.id);
+        const selfiePath = cachees.has(v.id) ? undefined : selfieMap.get(v.id);
         try { if (docPath) document_thumbnail = await storageService.getFileUrl(docPath, 3600); } catch { /* skip */ }
         try { if (selfiePath) selfie_thumbnail = await storageService.getFileUrl(selfiePath, 3600); } catch { /* skip */ }
         return { ...v, document_thumbnail, selfie_thumbnail };
@@ -190,18 +195,21 @@ router.get('/verification/:id',
       .eq('verification_request_id', id)
       .order('created_at', { ascending: true });
 
+    // Preuvid : photos d'une session v1 réservées aux administrateurs de la plateforme (v1/photos.ts).
+    const photosCachees = !estAdminPlateforme(req) && !!(verification as any).v1_parcours;
+
     // Resolve signed URLs for all documents and selfie
     const documentUrls: Array<{ id: string; file_name: string; document_type: string; url: string | null }> = [];
     for (const doc of (allDocuments || [])) {
       let url = null;
-      if (doc.file_path) {
+      if (doc.file_path && !photosCachees) {
         try { url = await storageService.getFileUrl(doc.file_path, 3600); } catch { /* skip */ }
       }
       documentUrls.push({ id: doc.id, file_name: doc.file_name, document_type: doc.document_type, url });
     }
 
     let selfieUrl = null;
-    if (verification.selfie?.file_path) {
+    if (verification.selfie?.file_path && !photosCachees) {
       try { selfieUrl = await storageService.getFileUrl(verification.selfie.file_path, 3600); } catch { /* skip */ }
     }
 
@@ -467,7 +475,8 @@ router.put('/verification/:id/review',
     });
 
     // Preuvid : événement v1 session.revue (ne fait rien si ce n'est pas une session v1).
-    void import('../v1/sessions.js').then(m => m.notifierFinV1(id, 'revue'))
+    // Parcours âge : l'image gardée pour la revue est effacée une fois la décision prise.
+    void import('../v1/sessions.js').then(m => Promise.all([m.notifierFinV1(id, 'revue'), m.effacerImagesAge(id)]))
       .catch(err => logger.warn('v1: session.revue non émis', { error: err instanceof Error ? err.message : String(err) }));
 
     // ── Webhook forwarding (after response is sent) ──────────────
@@ -599,6 +608,17 @@ router.get('/analytics',
     const analytics = await getAnalytics(period, developerId);
 
     res.json(analytics);
+  })
+);
+
+// Preuvid : abandons et durées par étape des parcours v1, sans donnée personnelle (v1/mesures.ts).
+// Administrateurs de la plateforme seulement ; jours inclus, 30 derniers jours par défaut.
+router.get('/preuvid/mesures',
+  authenticateJWT as any,
+  requireAdminRole(['admin']) as any,
+  catchAsync(async (req: Request, res: Response) => {
+    const jour = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+    res.json(await releve(jour(req.query.du), jour(req.query.au)));
   })
 );
 

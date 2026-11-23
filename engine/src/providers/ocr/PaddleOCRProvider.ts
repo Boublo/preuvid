@@ -199,6 +199,24 @@ function parseAamvaDate(s: string): string | null {
 }
 
 /**
+ * Preuvid : dates écrites « JJ MM AAAA », séparées par des espaces (recto de la CNI 2021 :
+ * « 08 01 1952 »). Lues seulement avec l'indication DMY, et seulement si le jour, le mois et
+ * l'année sont plausibles, pour ne pas prendre une suite de chiffres quelconque pour une date.
+ */
+export function findSpacedDmyDates(text: string): string[] {
+  const results: string[] = [];
+  const re = /(?<![\d.\/-])(\d{2})[ \t]{1,2}(\d{2})[ \t]{1,2}(\d{4})(?![\d.\/-])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const [, j, mo, a] = m;
+    const jour = parseInt(j, 10), mois = parseInt(mo, 10), annee = parseInt(a, 10);
+    if (jour < 1 || jour > 31 || mois < 1 || mois > 12 || annee < 1900 || annee > 2099) continue;
+    results.push(`${a}-${mo}-${j}`);
+  }
+  return results;
+}
+
+/**
  * Extract ALL date strings from text (numeric and month-name formats).
  * @param hint - Optional country-format hint passed to standardizeDateFormat.
  */
@@ -222,6 +240,7 @@ function findAllDates(text: string, hint?: 'DMY' | 'MDY' | 'YMD'): string[] {
     const parsed = parseMonthNameDate(m[0]);
     if (parsed) results.push(parsed);
   }
+  if (hint === 'DMY') results.push(...findSpacedDmyDates(text));
   return results;
 }
 
@@ -1694,7 +1713,8 @@ export class PaddleOCRProvider implements OCRProvider {
         this.findField(flatLines, givenPatterns, (value, conf) => {
           const cleaned = this.stripTrailingLabelNoise(value);
           if (cleaned && !isHeaderNoise(cleaned) && !SPECIMEN_LABELS.test(cleaned) && !this.isLabelOrNoise(cleaned)) {
-            givenName = cleaned;
+            // Preuvid : la CNI 2021 sépare les prénoms par des virgules (« JEAN, PIERRE »).
+            givenName = cleaned.replace(/\s*,\s*/g, ' ').trim();
             nameConf = Math.max(nameConf, conf);
             return; // accepted
           }
@@ -2079,7 +2099,9 @@ export class PaddleOCRProvider implements OCRProvider {
     if (monthName) return monthName;
     // Numeric dates (e.g., "01/01/1981")
     const m = text.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-    return m ? standardizeDateFormat(m[0], hint) : null;
+    if (m) return standardizeDateFormat(m[0], hint);
+    // Preuvid : « 08 01 1952 » (CNI 2021), avec l'indication DMY seulement.
+    return hint === 'DMY' ? (findSpacedDmyDates(text)[0] ?? null) : null;
   }
 
   /**

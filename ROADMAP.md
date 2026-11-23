@@ -378,19 +378,129 @@ possible entre deux personnes. Un test vérifie l'option à chaque appel.
 
 But : les écrans mobiles des maquettes 03 à 10. Détail dans `preuvid/docs/verification-age.md`.
 
-- [ ] Parcours identité en cinq écrans : choix de la pièce, photo avec déclenchement automatique et
-      voyants (netteté, reflets, quatre coins), lecture, visage, résultat.
-- [ ] Parcours âge : première vérification, création du passe, confirmation aux visites suivantes.
-- [ ] Passe majeur : preuve « majeur » liée au téléphone par WebAuthn (clé d'accès), sans nom ni photo ;
+- [x] Parcours identité en cinq écrans : choix de la pièce, photo avec déclenchement automatique et
+      voyants (netteté, reflets, quatre coins), lecture, visage, résultat. Page `/verifier#jeton`
+      (`frontend/src/identite/`). Voyants : netteté, lumière et présence de la pièce (voir les écarts).
+- [x] Parcours âge : première vérification, création du passe, confirmation aux visites suivantes.
+      Pour le passe : page `/age` (`frontend/src/age/`), essai de bout en bout `preuvid/e2e/passe-test.mjs`.
+      Les sessions `age` créées par l'API v1 restent sur la page d'Idswyft, sans visage (voir les écarts).
+- [x] Passe majeur : preuve « majeur » liée au téléphone par WebAuthn (clé d'accès), sans nom ni photo ;
       validité d'une confirmation limitée à la visite, expirée après une heure d'inactivité ;
-      rien de stocké dans un compte du site client.
-- [ ] Double anonymat : le site ne reçoit que « majeur oui/non » ; Preuvid n'enregistre pas quel site est visité.
-- [ ] Étude de faisabilité, avant tout code : lecture de la puce NFC de la CNI 2021 et du passeport depuis
+      rien de stocké dans un compte du site client. Le minuteur d'inactivité et la fin à la fermeture de
+      la page sont fournis par le module du site (`preuvid/sdk/age/navigateur.js`) : aucun test ne les couvre,
+      et le site doit les brancher.
+- [x] Double anonymat : le site ne reçoit que « majeur oui/non » ; Preuvid n'enregistre pas quel site est visité.
+      Signature aveugle, voir `preuvid/docs/double-anonymat.md` (limite : rapprochement par l'heure).
+- [x] Étude de faisabilité, avant tout code : lecture de la puce NFC de la CNI 2021 et du passeport depuis
       un navigateur mobile (sans appli). Rendre un avis écrit : possible, possible avec appli, impossible.
-- [ ] Accessibilité : cibles tactiles de 44 px, contrastes, lecteur d'écran, animations réduites respectées.
-- [ ] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
+      Avis : impossible depuis un navigateur, possible avec une appli (`preuvid/docs/nfc-faisabilite.md`).
+- [x] Accessibilité : cibles tactiles de 44 px, contrastes, lecteur d'écran, animations réduites respectées.
+      Écrans 03 à 07 audités avec axe-core (WCAG 2.2 A et AA) et au clavier : aucune violation, aucune cible
+      sous 44 px, pas de défilement horizontal à 320 px, contour du focus lisible partout (lilas sur les
+      écrans sombres, 9,6:1). Lecteur d'écran : vérifié par l'arbre d'accessibilité et les régions annoncées,
+      pas encore avec VoiceOver ni TalkBack (à faire avec l'essai sur appareils réels).
+- [x] Mesurer le taux d'abandon et la durée par étape (sans donnée personnelle).
+      `backend/src/v1/mesures.ts` : une ligne par session finie dans `v1_mesures`, écrite une seule fois
+      (marque conditionnelle `v1_mesuree_le`), au passage horaire pour les liens expirés et juste avant
+      toute suppression (site ou passe). Issues : page jamais ouverte, ouverte sans photo, abandon au recto,
+      au verso, au visage, validée, refusée, à revoir, supprimée en cours. Parcours identité, passe majeur
+      et vérifications d'âge des sites. Relevé par parcours et par étape (atteintes, abandons, taux, médiane,
+      90e centile) : `GET /api/admin/preuvid/mesures?du=&au=`, administrateurs de la plateforme seulement.
+      Vérifié sur la pile : quatre sessions réelles (recto envoyé puis lien expiré, ouverte sans photo,
+      jamais ouverte, supprimée par le site après le recto) donnent les quatre bonnes lignes ; un second
+      passage n'ajoute rien ; une vérification du passe ouverte puis purgée à l'expiration donne `passe`,
+      `sans_photo`, page ouverte ; la route refuse sans jeton d'administrateur (401). Les essais ratés
+      font bien chacun une ligne `documents` (jusqu'à 3 rectos par session en base).
 
 Fin du lot : parcours complet sur iPhone et Android réels, en moins de deux minutes pour l'identité.
+
+Écarts relevés en cours de lot (à reprendre au bilan) :
+
+- Visage du passe (selfie, détection du vivant, comparaison à la pièce) : jamais mesuré sur de vrais
+  visages (faux refus, photo ou vidéo rejouée, biais). Le chemin du refus est parcouru de bout en bout ; celui
+  de la réussite n'est couvert que par des tests unitaires (images synthétiques refusées par le vivant).
+- Seule la machine d'états (`backend/src/verification`) a changé, pas `engine/` : le banc de lecture n'est
+  pas concerné.
+- Un ordinateur sans caméra ne peut pas créer de passe. Un majeur présent physiquement peut encore tout
+  faire à la place d'un mineur.
+- Les sessions `parcours: age` créées par un site (API v1) n'ont pas encore le visage : suite à faire.
+- Journaux : les métadonnées de vivant invalides ne sont plus recopiées dans le message d'erreur.
+- Page identité, voyants : « reflets » et « quatre coins » abandonnés. Pas de détection des coins sans
+  modèle ; les reflets ne se distinguent pas sur les cartes synthétiques du banc (claires : 30 à 41 % de
+  pixels saturés sur une photo propre, 13 à 15 % avec reflet). Remplacés par les voyants « lumière » et
+  « pièce » (des bords droits près d'au moins deux côtés du cadre, guidés par un rectangle en pointillés).
+- Seuils de la prise automatique (netteté 800, lumière 130, bords sur 2 côtés, sur l'image réduite à
+  480 px) mesurés sur les images synthétiques du banc seulement. Une carte très inclinée n'est pas
+  reconnue : la prise se fait alors à la main. Le bouton « Prendre la photo moi-même » reste toujours là.
+- Parcours de bout en bout fait avec une fausse caméra (vidéo tirée d'un passeport synthétique) : prise
+  automatique en 2,3 s (attente de 2,5 s voulue après l'ouverture de la caméra), lecture en 10 à 45 s, MRZ et 3 clés sur 3, visage, refus réel par le vivant,
+  suppression des photos à la demande. La réussite (écran « C'est fait ») n'est vue qu'avec un état simulé.
+- Photos des sessions v1 jamais servies au site : ni par `/selfie`, ni par `/api/files`, ni dans la liste
+  ou le détail de la console, y compris pour ses relecteurs et opérateurs. Seuls les administrateurs de
+  la plateforme les voient. Une option par client pourra venir au lot 4.
+- Photos chiffrées sur le disque par défaut (`STORAGE_ENCRYPTION=true`) : vérifié sur la pile (en-tête
+  `IDSW`, plus de JPEG lisible). Les fichiers déjà enregistrés en clair restent lisibles.
+- Le site reçoit nom, prénoms, date de naissance, numéro et validité de la pièce, nationalité et sexe :
+  l'écran 07 le dit. La maquette 03 annonçait « recevra seulement le résultat » : c'est faux pour ce
+  parcours. Le texte de la page a été corrigé ; le fichier de la maquette n'a pas été modifié.
+- Accessibilité, corrections faites : contour du focus invisible sur les écrans sombres (1,6:1, passé à
+  9,6:1, page `/age` comprise) ; voyants de la photo annoncés jusqu'à quatre fois par seconde, remplacés
+  par une consigne d'une phrase, annoncée seulement quand elle change et au plus toutes les 3 s ; après une
+  photo illisible, le focus va au message d'erreur (avant : au titre, qui pouvait couvrir l'alerte) ;
+  titre de l'onglet propre à chaque écran ; `aria-label` interdit retiré de la marque ; bouton
+  « Demander la suppression maintenant » sorti de la phrase (26 px de haut, 44 maintenant).
+  Reste ouvert : la détection du vivant demande de tourner la tête, et la page ne propose aucune autre
+  voie à qui ne le peut pas. Question à trancher avec David.
+- Titre de séjour envoyé au moteur comme `national_id` (même format carte, MRZ au verso) : pas de type
+  propre chez Idswyft.
+- Un refus est définitif : pas de « recommencer » sur la page, la personne repasse par le site.
+- Chez Idswyft, un seul recto illisible refuse la session (porte 1, `FRONT_OCR_FAILED`) et prévient le
+  site : vérifié sur la pile. Décision de David (20/11/2026) : 3 essais par côté pour le parcours
+  `identite` v1 (photo illisible seulement : `FRONT_OCR_FAILED`, `FRONT_LOW_CONFIDENCE`,
+  `BACK_BARCODE_NOT_FOUND`, `BACK_MRZ_UNREADABLE`), refus au troisième ; les signaux de fraude refusent
+  tout de suite. Les autres sessions (Idswyft, âge) gardent un seul essai. Vérifié sur la pile : trois
+  photos sans pièce prises à la main donnent deux reprises (« dernier essai » au deuxième échec), puis le
+  refus « recto illisible » ; une photo ratée puis le passeport mènent au visage. Après une photo
+  illisible, la prise automatique s'arrête pour ce côté (le même mauvais objet userait les essais) :
+  vérifié, rien ne part en 10 s, le bouton fait passer la photo. `/restart` d'Idswyft, qui accepte le
+  jeton de la personne, refuse désormais les sessions v1 (409) : il effaçait le refus et le compte d'essais.
+  Ce changement touche `VerificationSession.ts` d'Idswyft : à surveiller à la prochaine reprise amont.
+- Prise automatique durcie en plus (présence de la pièce, attente de 2,5 s, 4 images bonnes de suite) :
+  une scène nette sans pièce filmée 10 s ne déclenche rien. Une feuille de texte, une carte bancaire ou
+  une autre pièce posée à plat ont aussi des bords nets, et le bouton manuel n'a aucun contrôle : les
+  essais couvrent ces cas.
+- Recto puis verso d'une CNI parcouru avec une fausse caméra : prise du recto, lecture, écran du verso,
+  prise du verso. Le banc n'avait pas de recto de CNI 2021 : l'essai associait le recto d'une ancienne CNI
+  au verso d'une CNI 2021 d'une autre personne, d'où un refus attendu (`BACK_MRZ_BARCODE_MISMATCH`).
+- Recto de la CNI 2021 (23/11/2026) : ajouté au banc (72 images, série `extension`, mêmes identités que
+  les versos ; mise en page d'après le spécimen public, de mémoire, jamais comparée au spécimen officiel).
+  Lecture corrigée dans le moteur : libellés « Surname », « Given names », « DATE DE NAISS. »,
+  « DATE D'EXPIR. », « N° du document », dates « JJ MM AAAA » séparées par des espaces (indication DMY
+  seulement), virgules entre les prénoms. Banc : recto TOUT 0 % → 72 % (propre, reflet, rotation,
+  perspective, doigt, JPEG fort : 100 % ; flou et basse résolution : 0 %, prénoms mal lus ; sombre : 50 %).
+  Socle inchangé au chiffre près (95 / 95 / 94 / 97 %). Faux sûrs : la nouvelle série en montrait 2
+  (numéro lu « O » pour « 0 » à 0,96) ; un recto sans MRZ n'est plus jamais présenté comme sûr champ par
+  champ (plafond 0,9, après le calcul de `ocr_confidence`, qui ne change pas) : 0 faux sûr.
+  Pas fait : l'essai recto puis verso sur la pile, et tout essai sur une vraie carte. Une confusion O/0
+  au recto ne donne que 0,5 au numéro dans la validation croisée d'Idswyft (champ critique).
+- Le suivi de la lecture ne s'arrête plus sur une erreur réseau passagère : il attend et relit l'état.
+- La voix (option d'Idswyft) n'est pas proposée par la page ; une session qui l'exigerait finirait abandonnée.
+- Pas de page « Comment vos données sont utilisées » : le lien de la maquette 03 attend son texte.
+- Les sessions `parcours: age` créées par l'API restent sur la page d'Idswyft.
+- Mesures d'abandon : les durées sont prises à l'arrivée des photos au serveur, lecture comprise (l'écart
+  « verso » contient la lecture du recto). L'ouverture de la page n'est connue que pour l'identité et le
+  passe ; pour les vérifications d'âge des sites (page d'Idswyft), « page ouverte » reste inconnu. Les
+  sessions créées avant la migration ne sont pas comptées. Si l'écriture de la ligne échoue après la
+  marque, la session est perdue pour la mesure (erreur journalisée). Le relevé n'existe qu'en JSON : pas
+  encore d'écran dans la console (lot 4). La route n'a été essayée sur la pile que sans jeton (refus) ; le
+  calcul du relevé l'a été directement dans le conteneur.
+- Mesures d'abandon, lien résiduel : aucune ligne ne porte d'identifiant, mais l'ordre d'écriture reste dans
+  la base. Qui lit la base brute peut rapprocher la ligne d'une session supprimée par le site (écrite au
+  moment de la pierre tombale). Atténué pour le passage horaire (lot mélangé, marque au jour seulement).
+- Une session est comptée « supprimée » avant que la suppression soit confirmée : si elle échoue (503) et
+  que la session va au bout, elle reste comptée « supprimée ».
+- Moteur froid : le premier recto après un long repos a dépassé 60 s (504 de nginx, nouvel essai du
+  serveur, réponse en 83 s) ; le suivant, 10 s. À regarder avec l'essai sur appareils réels.
 
 ## Lot 4 — Espace client, administration, facturation à l'usage
 

@@ -91,6 +91,29 @@ export const openapiV1 = {
     '/openapi.json': {
       get: { summary: 'Cette description', security: [], responses: { 200: { description: 'OpenAPI 3.1' } } },
     },
+    '/age/cles': {
+      get: {
+        summary: 'Clés publiques du passe majeur',
+        description: 'Une clé signifie « majeur » pendant sa période de validité. À récupérer côté serveur, au plus '
+          + 'une fois par heure. Variante RSABSSA-SHA384-PSS-Randomized (RFC 9474) : la preuve est une signature '
+          + 'RSA-PSS SHA-384 (sel de 48 octets) d’un message de 64 octets, aléa de 32 octets suivi de votre défi.',
+        security: [],
+        responses: { 200: { description: 'Clés', content: json(ref('ClesAge')) } },
+      },
+    },
+    '/age/releves': {
+      post: {
+        summary: 'Déclarer les preuves d’âge acceptées (comptage différé)',
+        description: 'Au moins une fois par jour, jusqu’à 1 000 preuves par appel. Chaque preuve est vérifiée ; '
+          + 'une preuve déjà déclarée compte comme doublon.',
+        requestBody: { required: true, content: json(ref('Releve')) },
+        responses: {
+          200: { description: 'Bilan', content: json(ref('BilanReleve')) },
+          400: erreur('Corps invalide'),
+          401: erreur('Clé d’API absente ou invalide'),
+        },
+      },
+    },
   },
   webhooks: {
     evenementSession: {
@@ -170,6 +193,43 @@ export const openapiV1 = {
           majeur: { type: 'boolean', description: 'Parcours age seulement.' },
           date: { type: 'string', format: 'date-time' },
         },
+      },
+      ClesAge: {
+        type: 'object',
+        properties: {
+          variante: { const: 'RSABSSA-SHA384-PSS-Randomized' },
+          cles: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: 'SHA-256 hexadécimal de la clé publique (SPKI)' },
+                spki: { type: 'string', description: 'Clé publique RSA, SPKI DER en base64' },
+                valide_du: { type: 'string', format: 'date-time' }, valide_au: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+        },
+      },
+      Releve: {
+        type: 'object', required: ['preuves'], additionalProperties: false,
+        properties: {
+          preuves: {
+            type: 'array', minItems: 1, maxItems: 1000,
+            items: {
+              type: 'object', required: ['cle', 'message', 'signature'], additionalProperties: false,
+              properties: {
+                cle: { type: 'string', description: 'Identifiant de la clé' },
+                message: { type: 'string', description: 'Message signé (64 octets), base64url' },
+                signature: { type: 'string', description: 'Signature (256 octets), base64url' },
+              },
+            },
+          },
+        },
+      },
+      BilanReleve: {
+        type: 'object',
+        properties: { acceptees: { type: 'integer' }, doublons: { type: 'integer' }, invalides: { type: 'integer' } },
       },
       ListeEvenements: {
         type: 'object',

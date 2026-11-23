@@ -23,7 +23,7 @@ import { BarcodeService } from '@/services/barcode.js';
 import { FaceRecognitionService } from '@/services/faceRecognition.js';
 import { detectMRZInText, alpha3ToAlpha2 } from '@/services/mrz.js';
 import { readMrzFromText, type MrzReading } from '@/services/mrzReader.js';
-import { mergeMrzIntoOcr, type MergedFields } from '@/services/mrzMerge.js';
+import { capUncheckedConfidences, mergeMrzIntoOcr, type MergedFields } from '@/services/mrzMerge.js';
 import { deskewDocument, type DeskewResult } from '@/services/deskew.js';
 import {
   createLivenessProvider, verifyHeadTurnLiveness,
@@ -272,6 +272,9 @@ router.post('/front', requireModels('ocr', 'visage'), upload.single('file'), asy
     const confidenceScores = ocrData?.confidence_scores || {};
     const values = Object.values(confidenceScores).filter((v): v is number => typeof v === 'number');
     const avgConfidence = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0.5;
+    // Preuvid : sans MRZ au recto, rien n'est sûr champ par champ. Après la moyenne, pour ne pas changer
+    // ocr_confidence (porte 1, score de risque) : seule l'étiquette « sûr » des champs change.
+    if (ocrData && !mrzReading) capUncheckedConfidences(ocrData);
 
     // Resolve document type: use auto-classified type if available, otherwise raw input
     const resolvedDocType = ocrData?.detected_document_type || documentType;

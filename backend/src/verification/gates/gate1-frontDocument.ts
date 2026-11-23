@@ -41,10 +41,11 @@ function isNoiseValue(field: string, value: string): boolean {
 }
 
 export function evaluateGate1(front: FrontExtractionResult): GateResult {
-  // Log all OCR fields entering Gate 1 for diagnostics
+  // Preuvid : le journal dit quels champs ont été lus, jamais leur valeur (nom, date de naissance,
+  // numéro de pièce sont des données personnelles ; ils n'ont rien à faire dans les journaux).
   logger.info('Gate 1: evaluating front document', {
     ocr_fields: Object.fromEntries(
-      DESIRED_FIELDS.map(f => [f, (front.ocr as Record<string, unknown>)[f] ?? '<undefined>'])
+      DESIRED_FIELDS.map(f => [f, (front.ocr as Record<string, unknown>)[f] ? 'lu' : 'absent'])
     ),
     ocr_confidence: front.ocr_confidence,
     face_confidence: front.face_confidence,

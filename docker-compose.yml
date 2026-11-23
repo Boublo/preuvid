@@ -94,6 +94,8 @@ services:
       SERVICE_TOKEN: ${SERVICE_TOKEN:?SERVICE_TOKEN manquant, voir .env.community}
       CORS_ORIGINS: "${CORS_ORIGINS:-}"
       STORAGE_PROVIDER: "${STORAGE_PROVIDER:-local}"
+      # Preuvid : photos chiffrées sur le disque (AES-256-GCM sous ENCRYPTION_KEY). Les anciennes, en clair, restent lisibles.
+      STORAGE_ENCRYPTION: "${STORAGE_ENCRYPTION:-true}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
       AWS_REGION: "${AWS_REGION:-us-east-1}"
@@ -104,6 +106,9 @@ services:
       SANDBOX_MODE: ${SANDBOX_MODE:-false}
       MIGRATIONS_LENIENT: "true"
       ENGINE_URL: http://engine:3002
+      # Passe majeur : domaine des clés d'accès (domaine d'essai tant que le définitif n'est pas acheté).
+      PREUVID_PASSE_DOMAINE: "${PREUVID_PASSE_DOMAINE:-localhost}"
+      PREUVID_PASSE_ORIGINE: "${PREUVID_PASSE_ORIGINE:-http://localhost,https://localhost}"
     volumes:
       - uploads:/app/backend/uploads
       - temp:/app/backend/temp

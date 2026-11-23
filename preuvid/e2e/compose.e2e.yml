@@ -35,3 +35,23 @@ services:
     volumes:
       - ./preuvid/e2e:/app/backend/e2e:ro
       - ./preuvid/banc/img:/img:ro
+
+  # Passe majeur (lot 3) : voir passe-test.mjs. Aucun webhook, aucune adresse de site.
+  passe-test:
+    image: preuvid/api:local
+    pull_policy: never
+    profiles: [e2e]
+    networks: [interne]
+    depends_on:
+      api:
+        condition: service_healthy
+    working_dir: /app/backend
+    entrypoint: ["node", "/app/backend/e2e/passe-test.mjs"]
+    environment:
+      API_URL: http://api:3001
+      DATABASE_URL: postgresql://${DB_USER:-idswyft}:${DB_PASSWORD:?DB_PASSWORD manquant}@postgres:5432/${DB_NAME:-idswyft}
+      API_KEY_SECRET: ${API_KEY_SECRET:?API_KEY_SECRET manquant}
+    volumes:
+      - ./preuvid/e2e:/app/backend/e2e:ro
+      - ./preuvid/banc/img:/img:ro
+      - ./preuvid/sdk/age:/app/backend/sdk-age:ro

@@ -37,6 +37,15 @@ function flowFor(parcours: V1Parcours) {
   return FLOW_PRESETS[MODE_PAR_PARCOURS[parcours]];
 }
 
+/**
+ * Lien envoyé à la personne. Identité : page Preuvid, jeton après le # (jamais envoyé au serveur dans
+ * l'adresse, donc absent des journaux). Âge : encore la page d'Idswyft (suite à faire, ROADMAP lot 3).
+ */
+export function lienParcours(base: string, parcours: V1Parcours, jeton: string): string {
+  const racine = base.replace(/\/$/, '');
+  return parcours === 'identite' ? `${racine}/verifier#${jeton}` : `${racine}/user-verification?session=${jeton}`;
+}
+
 /** Résultat final : la colonne `status` l'emporte (elle porte la revue manuelle), sinon l'état. */
 function finalResult(row: V1Row, state: SessionState | null): 'verified' | 'failed' | 'manual_review' | null {
   if (row.status === 'verified' || row.status === 'failed' || row.status === 'manual_review') return row.status;

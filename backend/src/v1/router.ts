@@ -13,6 +13,8 @@ import { barrageEchecsAuth, erreurV1, idempotence, limiteParCle } from './protec
 import { creerSession, lireDecision, lireSession, supprimerSession, type CleApi } from './sessions.js';
 import { rejouer } from './webhooks.js';
 import { openapiV1 } from './openapi.js';
+import { routerAge } from './age/router.js';
+import { routerParcours } from './parcours.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -45,6 +47,11 @@ function idValide(req: Request, res: Response, next: NextFunction) {
 export const routerV1 = express.Router();
 
 routerV1.get('/openapi.json', (_req, res) => { res.json(openapiV1); });
+
+// Passe majeur : routes de la page Preuvid, sans clé d'API (sauf /age/releves, authentifiée à part).
+routerV1.use('/age', routerAge);
+// Page du parcours identité : le jeton de session suffit (preuvid/docs/api.md, « Page du parcours »).
+routerV1.use('/parcours', routerParcours);
 
 routerV1.use(barrageEchecsAuth, authenticateAPIKey, limiteParCle);
 
